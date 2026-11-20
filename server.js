@@ -21,17 +21,35 @@ app.use((req, res, next) => {
 app.get('/api/health', (req, res) => res.json({ ok: true, ts: Date.now() }));
 
 /* ============================================================
-   TRADUCCIÓN con Google Translate gtx
+   DETECCIÓN DE IDIOMA
+   ============================================================ */
+function detectarIdioma(texto) {
+  if (!texto) return 'en';
+  if (/[\u3040-\u309f\u30a0-\u30ff]/.test(texto)) return 'ja';
+  if (/[\u4e00-\u9fff]/.test(texto)) return 'zh';
+  if (/[\uac00-\ud7af]/.test(texto)) return 'ko';
+  if (/[\u0400-\u04ff]/.test(texto)) return 'ru';
+  if (/[\u0600-\u06ff]/.test(texto)) return 'ar';
+  return 'en';
+}
+
+/* ============================================================
+   TRADUCCIÓN: Google gtx → MyMemory fallback
    ============================================================ */
 function translateText(text) {
   return new Promise((resolve) => {
     if (!text || typeof text !== 'string') return resolve(text || '');
     const t = text.trim();
     if (!t) return resolve('');
-    if (/^[A-Za-z0-9\s.,;:!?()'"¡¿\-/%&]+$/.test(t) && t.length < 150) return resolve(t);
+    
+    // Si es texto latino simple, no traducir
+    if (/^[A-Za-z0-9\s.,;:!?()'"¡¿\-/%&]+$/.test(t) && t.length < 150) {
+      return resolve(t);
+    }
 
-    const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=es&dt=t&q=${encodeURIComponent(t)}`;
-    https.get(url, { headers: { 'User-Agent': 'Mozilla/5.0' } }, (res) => {
+    // 1) Intentar Google Translate gtx
+    const gtxUrl = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=es&dt=t&q=${encodeURIComponent(t)}`;
+    https.get(gtxUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } }, (res) => {
       let data = '';
       res.on('data', c => data += c);
       res.on('end', () => {
@@ -40,13 +58,31 @@ function translateText(text) {
           if (j && Array.isArray(j[0])) {
             const tr = j[0].map(x => x[0]).join('');
             if (tr && tr !== t && tr.length > 0) {
-              console.log(`[OK] "${t.slice(0, 40)}..." → "${tr.slice(0, 40)}..."`);
+              console.log(`[OK-gtx] "${t.slice(0, 30)}..." → "${tr.slice(0, 30)}..."`);
               return resolve(tr);
             }
           }
         } catch (e) {}
-        console.log(`[FALLÓ] "${t.slice(0, 40)}..."`);
-        resolve(t);
+        
+        // 2) Fallback: MyMemory con idioma detectado
+        const lang = detectarIdioma(t);
+        const mmUrl = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(t)}&langpair=${lang}|es`;
+        https.get(mmUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } }, (res2) => {
+          let data2 = '';
+          res2.on('data', c => data2 += c);
+          res2.on('end', () => {
+            try {
+              const j2 = JSON.parse(data2);
+              const tr2 = j2 && j2.responseData && j2.responseData.translatedText;
+              if (tr2 && tr2 !== t && !/MYMEMORY WARNING/i.test(tr2) && !/INVALID SOURCE LANGUAGE/i.test(tr2)) {
+                console.log(`[OK-mm] "${t.slice(0, 30)}..." → "${tr2.slice(0, 30)}..."`);
+                return resolve(tr2);
+              }
+            } catch (e) {}
+            console.log(`[FALLÓ] "${t.slice(0, 30)}..."`);
+            resolve(t);
+          });
+        }).on('error', () => resolve(t));
       });
     }).on('error', () => resolve(t));
   });
@@ -91,7 +127,8 @@ function parseSheinCartOutput(output) {
       const s = current.url.match(/-p-(\d+)\.html/);
       if (s) {
         current.sku = s[1];
-        current.img = `https://img.ltwebstatic.com/images3_pi/2023/07/20/${s[1]}_thumbnail_400x533.webp`;
+        // NO generar URL de imagen (las URLs hardcoded no funcionan)
+        current.img = '';
       } else {
         current.sku = `SHEIN-${current.index}`;
       }
@@ -125,7 +162,6 @@ app.post('/api/cart', (req, res) => {
   if (!safe.test(rawUrl)) return res.status(400).json({ ok: false, error: 'El enlace no parece ser válido de SHEIN.' });
 
   const quoted = `"${rawUrl.replace(/"/g, '\\"')}"`;
-  // SIN flags: solo el comando básico
   const cmd = `npx --no-install shein-cart ${quoted}`;
   const started = Date.now();
 
@@ -147,7 +183,8 @@ app.post('/api/cart', (req, res) => {
       return res.status(200).json({ ok: false, error: 'El carrito está vacío o expiró.', raw: stdout.slice(0, 800) });
     }
 
-    // Traducir en paralelo
+    // Traducir en paralelo con logs
+    console.log(`[Traduciendo] ${parsed.items.length} productos...`);
     try {
       const t = await Promise.all(parsed.items.map(it =>
         Promise.all([translateText(it.name), translateText(it.variant), translateText(it.meta)])
@@ -157,6 +194,7 @@ app.post('/api/cart', (req, res) => {
         parsed.items[i].variant = variant;
         parsed.items[i].meta = meta;
       });
+      console.log('[Traducción completada]');
     } catch (e) { console.warn('[Error traduciendo]:', e.message); }
 
     // Marcar agotados (NO filtrar)
@@ -182,6 +220,6 @@ app.post('/api/cart', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`\n🛒 SHEIN Cart Viewer (texto + traducción gtx)`);
+  console.log(`\n🛒 SHEIN Cart Viewer (texto + traducción gtx+mm)`);
   console.log(`Abre http://localhost:${PORT}\n`);
 });
