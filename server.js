@@ -38,17 +38,17 @@ function obtenerTituloReal(url) {
       res.on('data', c => html += c);
       res.on('end', () => {
         try {
-          // Buscar el título en el HTML (meta tag o h1)
+          // Buscar og:title (título oficial de SHEIN)
           const metaMatch = html.match(/<meta[^>]*property="og:title"[^>]*content="([^"]+)"/i);
           if (metaMatch && metaMatch[1]) {
-            console.log(`[Título real] ${metaMatch[1].slice(0, 50)}...`);
+            console.log(`[Título real] ${metaMatch[1].slice(0, 60)}...`);
             return resolve(metaMatch[1]);
           }
-          // Fallback: buscar en el título de la página
+          // Fallback: buscar en <title>
           const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
           if (titleMatch && titleMatch[1]) {
             const titulo = titleMatch[1].replace(/\s*-\s*SHEIN.*$/i, '').trim();
-            console.log(`[Título fallback] ${titulo.slice(0, 50)}...`);
+            console.log(`[Título fallback] ${titulo.slice(0, 60)}...`);
             return resolve(titulo);
           }
         } catch (e) {}
@@ -59,14 +59,15 @@ function obtenerTituloReal(url) {
 }
 
 /* ============================================================
-   TRADUCCIÓN con Google Translate gtx
+   TRADUCCIÓN con Google Translate gtx (solo si es necesario)
    ============================================================ */
 function translateText(text) {
   return new Promise((resolve) => {
     if (!text || typeof text !== 'string') return resolve(text || '');
     const t = text.trim();
     if (!t) return resolve('');
-    if (/^[A-Za-z0-9\s.,;:!?()'"¡¿\-/%&]+$/.test(t) && t.length < 150) return resolve(t);
+    // Si es texto latino simple, no traducir
+    if (/^[A-Za-z0-9\s.,;:!?()'"¡¿\-/%&]+$/.test(t) && t.length < 200) return resolve(t);
 
     const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=es&dt=t&q=${encodeURIComponent(t)}`;
     https.get(url, { headers: { 'User-Agent': 'Mozilla/5.0' } }, (res) => {
@@ -172,22 +173,31 @@ app.post('/api/cart', (req, res) => {
       return res.status(200).json({ ok: false, error: 'El carrito está vacío o expiró.', raw: stdout.slice(0, 800) });
     }
 
-    // OBTENER TÍTULOS REALES de cada producto (en paralelo)
+    // OBTENER TÍTULOS REALES de cada producto
     console.log(`[Obteniendo títulos reales] ${parsed.items.length} productos...`);
     const titulosReales = await Promise.all(
       parsed.items.map(it => obtenerTituloReal(it.url))
     );
+    
+    // Reemplazar nombres con títulos reales (si se obtuvieron)
     titulosReales.forEach((titulo, i) => {
       if (titulo) {
         parsed.items[i].nombreReal = titulo;
-        parsed.items[i].name = titulo; // Reemplazar con el título real
+        parsed.items[i].name = titulo; // Usar título real
+        console.log(`[OK] Producto #${i+1}: ${titulo.slice(0, 50)}...`);
+      } else {
+        console.log(`[FALLÓ] Producto #${i+1}: usando nombre original`);
       }
     });
 
-    // Traducir en paralelo
+    // Traducir SOLO variant y meta (el nombre ya está en español)
     try {
       const t = await Promise.all(parsed.items.map(it =>
-        Promise.all([translateText(it.name), translateText(it.variant), translateText(it.meta)])
+        Promise.all([
+          Promise.resolve(it.name), // Ya tiene el título real, no traducir
+          translateText(it.variant),
+          translateText(it.meta)
+        ])
       ));
       t.forEach(([name, variant, meta], i) => {
         parsed.items[i].name = name;
@@ -219,6 +229,6 @@ app.post('/api/cart', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`\n🛒 SHEIN Cart Viewer (títulos reales + traducción)`);
+  console.log(`\n🛒 SHEIN Cart Viewer (títulos reales desde SHEIN)`);
   console.log(`Abre http://localhost:${PORT}\n`);
 });
