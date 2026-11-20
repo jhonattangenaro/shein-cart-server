@@ -1,14 +1,13 @@
 const express = require('express');
 const { exec } = require('child_process');
-const https = require('https');
 const path = require('path');
+const https = require('https');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(express.json({ limit: '1mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-// CORS
 app.use((req, res, next) => {
   res.set({
     'Access-Control-Allow-Origin': '*',
@@ -22,7 +21,7 @@ app.use((req, res, next) => {
 app.get('/api/health', (req, res) => res.json({ ok: true, ts: Date.now() }));
 
 /* ============================================================
-   TRADUCCIÓN con https nativo de Node (sin fetch, sin timeout)
+   TRADUCCIÓN con MyMemory API (más confiable que Google gtx)
    ============================================================ */
 function translateText(text) {
   return new Promise((resolve) => {
@@ -35,7 +34,8 @@ function translateText(text) {
       return resolve(trimmed);
     }
 
-    const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=es&dt=t&q=${encodeURIComponent(trimmed)}`;
+    // MyMemory API (gratuita, 5000 palabras/día sin key)
+    const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(trimmed)}&langpair=ja|es`;
 
     https.get(url, { headers: { 'User-Agent': 'Mozilla/5.0' } }, (res) => {
       let data = '';
@@ -43,14 +43,24 @@ function translateText(text) {
       res.on('end', () => {
         try {
           const json = JSON.parse(data);
-          if (json && Array.isArray(json[0])) {
-            const translated = json[0].map(item => item[0]).join('');
-            return resolve(translated || trimmed);
+          if (json && json.responseData && json.responseData.translatedText) {
+            const translated = json.responseData.translatedText;
+            // Si MyMemory devuelve el mismo texto o un error, usar fallback
+            if (translated && translated !== trimmed && !/MYMEMORY WARNING/i.test(translated)) {
+              console.log(`[OK] "${trimmed.slice(0, 30)}..." → "${translated.slice(0, 30)}..."`);
+              return resolve(translated);
+            }
           }
-        } catch (e) {}
-        resolve(trimmed);
+          console.log(`[FALLÓ MyMemory] "${trimmed.slice(0, 30)}..."`);
+        } catch (e) {
+          console.log(`[ERROR parse] ${e.message}`);
+        }
+        resolve(trimmed); // devolver original si falla
       });
-    }).on('error', () => resolve(trimmed));
+    }).on('error', (err) => {
+      console.log(`[ERROR HTTP] ${err.message}`);
+      resolve(trimmed);
+    });
   });
 }
 
@@ -61,7 +71,6 @@ app.post('/api/cart', (req, res) => {
   const rawUrl = (req.body && req.body.url || '').trim();
   if (!rawUrl) return res.status(400).json({ ok: false, error: 'Falta el enlace del carrito.' });
 
-  // Regex corregida (sin brackets mal anidados)
   const safe = /^https?:\/\/(onelink\.shein\.com|[\w.-]*shein\.com)\/[A-Za-z0-9\-._~:/?#\[\]@!$&'()*+,;=%]+$/i;
   if (!safe.test(rawUrl)) {
     return res.status(400).json({ ok: false, error: 'El enlace no parece ser válido de SHEIN.' });
@@ -82,25 +91,20 @@ app.post('/api/cart', (req, res) => {
       return res.status(200).json({ ok: false, error: 'El carrito está vacío o expiró.', raw: stdout.slice(0, 800) });
     }
 
-    // Traducir en paralelo (más rápido)
-    try {
-      console.log(`[Traduciendo] ${parsed.items.length} productos...`);
-      const traducciones = await Promise.all(
-        parsed.items.map(it => Promise.all([
-          translateText(it.name),
-          translateText(it.variant),
-          translateText(it.meta)
-        ]))
-      );
-      traducciones.forEach(([name, variant, meta], i) => {
-        parsed.items[i].name = name;
-        parsed.items[i].variant = variant;
-        parsed.items[i].meta = meta;
-      });
-      console.log('[Traducción completada]');
-    } catch (e) {
-      console.warn('[Error traduciendo]:', e.message);
-    }
+    console.log(`\n[Traduciendo] ${parsed.items.length} productos...`);
+    const traducciones = await Promise.all(
+      parsed.items.map(it => Promise.all([
+        translateText(it.name),
+        translateText(it.variant),
+        translateText(it.meta)
+      ]))
+    );
+    traducciones.forEach(([name, variant, meta], i) => {
+      parsed.items[i].name = name;
+      parsed.items[i].variant = variant;
+      parsed.items[i].meta = meta;
+    });
+    console.log('[Traducción completada]\n');
 
     // Filtrar agotados
     parsed.items = parsed.items.filter(it => {
@@ -185,6 +189,6 @@ function parseSheinCartOutput(output) {
 }
 
 app.listen(PORT, () => {
-  console.log(`\n🛒 SHEIN Cart Viewer (con traducción)`);
+  console.log(`\n🛒 SHEIN Cart Viewer (con traducción MyMemory)`);
   console.log(`Abre http://localhost:${PORT}\n`);
 });
