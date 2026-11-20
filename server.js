@@ -5,8 +5,6 @@ const https = require('https');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-const CURRENCY = process.env.SHEIN_CURRENCY || 'COP';
-
 app.use(express.json({ limit: '1mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -23,14 +21,13 @@ app.use((req, res, next) => {
 app.get('/api/health', (req, res) => res.json({ ok: true, ts: Date.now() }));
 
 /* ============================================================
-   TRADUCCIÓN con Google Translate gtx (soporta sl=auto)
+   TRADUCCIÓN con Google Translate gtx
    ============================================================ */
 function translateText(text) {
   return new Promise((resolve) => {
     if (!text || typeof text !== 'string') return resolve(text || '');
     const t = text.trim();
     if (!t) return resolve('');
-    // Si es texto latino simple, no traducir
     if (/^[A-Za-z0-9\s.,;:!?()'"¡¿\-/%&]+$/.test(t) && t.length < 150) return resolve(t);
 
     const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=es&dt=t&q=${encodeURIComponent(t)}`;
@@ -56,7 +53,7 @@ function translateText(text) {
 }
 
 /* ============================================================
-   PARSER DE TEXTO (el que SÍ funciona)
+   PARSER DE TEXTO
    ============================================================ */
 function parseSheinCartOutput(output) {
   const result = { sharedBy: '', total: null, itemsCount: 0, items: [] };
@@ -128,12 +125,20 @@ app.post('/api/cart', (req, res) => {
   if (!safe.test(rawUrl)) return res.status(400).json({ ok: false, error: 'El enlace no parece ser válido de SHEIN.' });
 
   const quoted = `"${rawUrl.replace(/"/g, '\\"')}"`;
-  // SIN --json, solo -c COP para moneda colombiana
-  const cmd = `npx --no-install shein-cart -c ${CURRENCY} ${quoted}`;
+  // SIN flags: solo el comando básico
+  const cmd = `npx --no-install shein-cart ${quoted}`;
   const started = Date.now();
 
+  console.log(`[CMD] ${cmd}`);
+
   exec(cmd, { timeout: 90000, maxBuffer: 20 * 1024 * 1024, shell: true }, async (err, stdout, stderr) => {
-    if (err) return res.status(500).json({ ok: false, error: 'Error consultando carrito.', detail: stderr });
+    if (err) {
+      console.error('[ERROR]', err.message);
+      console.error('[STDERR]', stderr);
+      return res.status(500).json({ ok: false, error: 'Error consultando carrito.', detail: stderr });
+    }
+
+    console.log(`[STDOUT length] ${stdout.length} chars`);
 
     const parsed = parseSheinCartOutput(stdout);
     console.log(`[Parse] ${parsed.items.length} items (header: ${parsed.itemsCount})`);
@@ -172,11 +177,11 @@ app.post('/api/cart', (req, res) => {
       .filter(it => !it.outOfStock)
       .reduce((acc, item) => acc + (item.price || 0), 0);
 
-    res.json({ ok: true, ...parsed, currency: CURRENCY, ms: Date.now() - started });
+    res.json({ ok: true, ...parsed, ms: Date.now() - started });
   });
 });
 
 app.listen(PORT, () => {
-  console.log(`\n🛒 SHEIN Cart Viewer (texto + traducción gtx, moneda ${CURRENCY})`);
+  console.log(`\n🛒 SHEIN Cart Viewer (texto + traducción gtx)`);
   console.log(`Abre http://localhost:${PORT}\n`);
 });
