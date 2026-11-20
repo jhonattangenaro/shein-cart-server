@@ -5,6 +5,8 @@ const https = require('https');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+const CURRENCY = process.env.SHEIN_CURRENCY || 'COP';
+
 app.use(express.json({ limit: '1mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -20,115 +22,142 @@ app.use((req, res, next) => {
 
 app.get('/api/health', (req, res) => res.json({ ok: true, ts: Date.now() }));
 
-/* ============================================================
-   TRADUCCIÓN con MyMemory API (más confiable que Google gtx)
-   ============================================================ */
+/* ---------- Traducción (MyMemory) ---------- */
 function translateText(text) {
   return new Promise((resolve) => {
     if (!text || typeof text !== 'string') return resolve(text || '');
-    const trimmed = text.trim();
-    if (!trimmed) return resolve('');
-
-    // Si solo tiene caracteres latinos básicos, no traducir
-    if (/^[A-Za-z0-9\s.,;:!?()'"¡¿\-]+$/.test(trimmed) && trimmed.length < 100) {
-      return resolve(trimmed);
-    }
-
-    // MyMemory API (gratuita, 5000 palabras/día sin key)
-    const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(trimmed)}&langpair=ja|es`;
-
+    const t = text.trim();
+    if (!t) return resolve('');
+    if (/^[A-Za-z0-9\s.,;:!?()'"¡¿\-/%]+$/.test(t) && t.length < 120) return resolve(t);
+    const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(t)}&langpair=auto|es`;
     https.get(url, { headers: { 'User-Agent': 'Mozilla/5.0' } }, (res) => {
       let data = '';
-      res.on('data', chunk => data += chunk);
+      res.on('data', c => data += c);
       res.on('end', () => {
         try {
-          const json = JSON.parse(data);
-          if (json && json.responseData && json.responseData.translatedText) {
-            const translated = json.responseData.translatedText;
-            // Si MyMemory devuelve el mismo texto o un error, usar fallback
-            if (translated && translated !== trimmed && !/MYMEMORY WARNING/i.test(translated)) {
-              console.log(`[OK] "${trimmed.slice(0, 30)}..." → "${translated.slice(0, 30)}..."`);
-              return resolve(translated);
-            }
-          }
-          console.log(`[FALLÓ MyMemory] "${trimmed.slice(0, 30)}..."`);
-        } catch (e) {
-          console.log(`[ERROR parse] ${e.message}`);
-        }
-        resolve(trimmed); // devolver original si falla
+          const j = JSON.parse(data);
+          const tr = j && j.responseData && j.responseData.translatedText;
+          if (tr && tr !== t && !/MYMEMORY WARNING/i.test(tr)) return resolve(tr);
+        } catch (e) {}
+        resolve(t);
       });
-    }).on('error', (err) => {
-      console.log(`[ERROR HTTP] ${err.message}`);
-      resolve(trimmed);
-    });
+    }).on('error', () => resolve(t));
   });
 }
 
-/* ============================================================
-   ENDPOINT PRINCIPAL
-   ============================================================ */
+/* ---------- Filtro estricto: SOLO agotados reales ---------- */
+function estaAgotado(it) {
+  const s = String(it.status || '').toLowerCase();
+  return /sold out|out of stock|agotado|indisponible|no disponible|unavailable/.test(s);
+}
+
+/* ---------- ENDPOINT ---------- */
 app.post('/api/cart', (req, res) => {
   const rawUrl = (req.body && req.body.url || '').trim();
   if (!rawUrl) return res.status(400).json({ ok: false, error: 'Falta el enlace del carrito.' });
 
   const safe = /^https?:\/\/(onelink\.shein\.com|[\w.-]*shein\.com)\/[A-Za-z0-9\-._~:/?#\[\]@!$&'()*+,;=%]+$/i;
-  if (!safe.test(rawUrl)) {
-    return res.status(400).json({ ok: false, error: 'El enlace no parece ser válido de SHEIN.' });
-  }
+  if (!safe.test(rawUrl)) return res.status(400).json({ ok: false, error: 'El enlace no parece ser válido de SHEIN.' });
 
   const quoted = `"${rawUrl.replace(/"/g, '\\"')}"`;
-  const cmd = `npx --no-install shein-cart ${quoted}`;
+  const cmd = `npx --no-install shein-cart --json -c ${CURRENCY} ${quoted}`;
   const started = Date.now();
 
   exec(cmd, { timeout: 90000, maxBuffer: 20 * 1024 * 1024, shell: true }, async (err, stdout, stderr) => {
-    if (err) {
-      console.error('[Error shein-cart]:', stderr);
-      return res.status(500).json({ ok: false, error: 'Error consultando carrito.', detail: stderr });
+    if (err) return res.status(500).json({ ok: false, error: 'Error consultando carrito.', detail: stderr });
+
+    let parsed;
+    try {
+      parsed = parseSheinCartJson(stdout);
+      console.log('[Parse] JSON OK ->', parsed.items.length, 'items (header:', parsed.headerCount, ')');
+    } catch (e) {
+      console.warn('[Parse] JSON falló, fallback a texto:', e.message);
+      parsed = parseSheinCartOutput(stdout);
     }
 
-    let parsed = parseSheinCartOutput(stdout);
     if (!parsed.items.length) {
       return res.status(200).json({ ok: false, error: 'El carrito está vacío o expiró.', raw: stdout.slice(0, 800) });
     }
 
-    console.log(`\n[Traduciendo] ${parsed.items.length} productos...`);
-    const traducciones = await Promise.all(
-      parsed.items.map(it => Promise.all([
-        translateText(it.name),
-        translateText(it.variant),
-        translateText(it.meta)
-      ]))
-    );
-    traducciones.forEach(([name, variant, meta], i) => {
-      parsed.items[i].name = name;
-      parsed.items[i].variant = variant;
-      parsed.items[i].meta = meta;
-    });
-    console.log('[Traducción completada]\n');
+    // Traducir en paralelo
+    try {
+      const t = await Promise.all(parsed.items.map(it =>
+        Promise.all([translateText(it.name), translateText(it.variant), translateText(it.meta)])
+      ));
+      t.forEach(([name, variant, meta], i) => {
+        parsed.items[i].name = name;
+        parsed.items[i].variant = variant;
+        parsed.items[i].meta = meta;
+      });
+    } catch (e) { console.warn('[Error traduciendo]:', e.message); }
 
-    // Filtrar agotados
-    parsed.items = parsed.items.filter(it => {
-      const t = (it.name + ' ' + it.meta + ' ' + (it.status || '')).toLowerCase();
-      return !/agotado|sold out|no disponible/i.test(t);
-    });
-
-    // Traducir "only X left"
+    // NO filtramos: marcamos agotados y los mantenemos visibles
     for (const it of parsed.items) {
-      if (/only\s+(\d+)\s+left/i.test(it.status || '')) {
-        const n = (it.status || '').match(/only\s+(\d+)\s+left/i)[1];
-        it.status = `solo quedan ${n}`;
-      }
+      const s = String(it.status || '').toLowerCase();
+      it.outOfStock = /sold out|out of stock|agotado|indisponible|no disponible|unavailable/.test(s);
+      if (it.outOfStock) console.log(`[AGOTADO] #${it.index} SKU=${it.sku} status="${it.status}"`);
+      const m = (it.status || '').match(/only\s+(\d+)\s+left/i);
+      if (m) it.status = `solo quedan ${m[1]}`;
     }
 
+    const disponibles = parsed.items.filter(it => !it.outOfStock).length;
+    console.log(`[Conteo] total=${parsed.items.length} disponibles=${disponibles} agotados=${parsed.items.length - disponibles}`);
+
     parsed.itemsCount = parsed.items.length;
-    parsed.total = parsed.items.reduce((acc, item) => acc + (item.price || 0), 0);
-    res.json({ ok: true, ...parsed, ms: Date.now() - started });
+    parsed.availableCount = disponibles;
+    parsed.total = parsed.items
+      .filter(it => !it.outOfStock)
+      .reduce((acc, item) => acc + (item.price || 0), 0);
+
+    res.json({ ok: true, ...parsed, currency: CURRENCY, ms: Date.now() - started });
   });
 });
 
-/* ============================================================
-   PARSER (sin cambios)
-   ============================================================ */
+/* ---------- Parser JSON (defensivo) ---------- */
+function parseSheinCartJson(stdout) {
+  const j = JSON.parse(stdout);
+  const arr = findItemsArray(j) || [];
+  const items = arr.map((raw, i) => ({
+    index: raw.index || i + 1,
+    price: toNum(raw.price ?? raw.now_price ?? raw.amount),
+    originalPrice: toNum(raw.original_price ?? raw.list_price ?? null),
+    discountPct: raw.discount ? parseInt(raw.discount, 10) : null,
+    name: raw.goods_name || raw.name || raw.title || '',
+    variant: raw.attr || raw.variant || raw.sku_info || '',
+    meta: raw.color || raw.size || raw.meta || '',
+    url: raw.goods_url || raw.url || '',
+    sku: String(raw.goods_id || raw.sku || ''),
+    img: raw.goods_img || raw.image || '',
+    status: raw.status_name || raw.status || ''
+  }));
+  return {
+    sharedBy: j.sharedBy || j.share_user_name || j.shared_by || '',
+    headerCount: j.itemsCount || j.total_items || j.count || items.length,
+    itemsCount: items.length,
+    total: j.total || null,
+    items
+  };
+}
+function findItemsArray(obj) {
+  if (Array.isArray(obj)) {
+    if (obj.length && typeof obj[0] === 'object' &&
+        (obj[0].goods_name || obj[0].name || obj[0].title || obj[0].price)) return obj;
+  }
+  if (obj && typeof obj === 'object') {
+    for (const k of Object.keys(obj)) {
+      const found = findItemsArray(obj[k]);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+function toNum(v) {
+  if (v == null) return 0;
+  const n = parseFloat(String(v).replace(/[^\d.]/g, ''));
+  return isNaN(n) ? 0 : n;
+}
+
+/* ---------- Parser texto (fallback) ---------- */
 function parseSheinCartOutput(output) {
   const result = { sharedBy: '', total: null, itemsCount: 0, items: [] };
   const header = output.match(/Items shared by (.+?) · (\d+) items? · total \$([\d.,]+)/i);
@@ -146,41 +175,26 @@ function parseSheinCartOutput(output) {
     const m = line.match(itemStart);
     if (m) {
       flush();
-      current = {
-        index: parseInt(m[1], 10),
-        price: parseFloat(m[2]),
-        originalPrice: m[3] ? parseFloat(m[3]) : null,
-        discountPct: m[4] ? parseInt(m[4], 10) : null,
-        name: m[5].trim(),
-        variant: '',
-        meta: '',
-        url: '',
-        sku: '',
-        img: '',
-        status: ''
-      };
+      current = { index: parseInt(m[1], 10), price: parseFloat(m[2]),
+        originalPrice: m[3] ? parseFloat(m[3]) : null, discountPct: m[4] ? parseInt(m[4], 10) : null,
+        name: m[5].trim(), variant: '', meta: '', url: '', sku: '', img: '', status: '' };
       continue;
     }
     if (!current) continue;
     const u = line.match(urlLine);
     if (u && !current.url) {
       current.url = u[1];
-      const skuMatch = current.url.match(/-p-(\d+)\.html/);
-      if (skuMatch) {
-        current.sku = skuMatch[1];
-        current.img = `https://img.ltwebstatic.com/images3_pi/2023/07/20/${skuMatch[1]}_thumbnail_400x533.webp`;
-      } else {
-        current.sku = `SHEIN-${current.index}`;
-      }
+      const s = current.url.match(/-p-(\d+)\.html/);
+      if (s) { current.sku = s[1]; current.img = `https://img.ltwebstatic.com/images3_pi/2023/07/20/${s[1]}_thumbnail_400x533.webp`; }
+      else current.sku = `SHEIN-${current.index}`;
       continue;
     }
-    const trimmed = line.trim();
-    if (trimmed && !current.variant) {
-      const parts = trimmed.split(/\s+·\s+/);
+    const t = line.trim();
+    if (t && /only \d+ left/i.test(t)) current.status = t;
+    else if (t && !current.variant) {
+      const parts = t.split(/\s+·\s+/);
       current.variant = parts[0].trim();
       current.meta = parts.slice(1).join(' · ').trim();
-    } else if (trimmed && /only \d+ left/i.test(trimmed)) {
-      current.status = trimmed;
     }
   }
   flush();
@@ -189,6 +203,6 @@ function parseSheinCartOutput(output) {
 }
 
 app.listen(PORT, () => {
-  console.log(`\n🛒 SHEIN Cart Viewer (con traducción MyMemory)`);
+  console.log(`\n🛒 SHEIN Cart Viewer (JSON + moneda ${CURRENCY})`);
   console.log(`Abre http://localhost:${PORT}\n`);
 });
