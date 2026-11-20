@@ -21,35 +21,55 @@ app.use((req, res, next) => {
 app.get('/api/health', (req, res) => res.json({ ok: true, ts: Date.now() }));
 
 /* ============================================================
-   DETECCIÓN DE IDIOMA
+   OBTENER TÍTULO REAL desde la URL del producto en SHEIN
    ============================================================ */
-function detectarIdioma(texto) {
-  if (!texto) return 'en';
-  if (/[\u3040-\u309f\u30a0-\u30ff]/.test(texto)) return 'ja';
-  if (/[\u4e00-\u9fff]/.test(texto)) return 'zh';
-  if (/[\uac00-\ud7af]/.test(texto)) return 'ko';
-  if (/[\u0400-\u04ff]/.test(texto)) return 'ru';
-  if (/[\u0600-\u06ff]/.test(texto)) return 'ar';
-  return 'en';
+function obtenerTituloReal(url) {
+  return new Promise((resolve) => {
+    if (!url || !url.includes('shein.com')) return resolve(null);
+    
+    https.get(url, { 
+      headers: { 
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept-Language': 'es-ES,es;q=0.9'
+      },
+      timeout: 8000
+    }, (res) => {
+      let html = '';
+      res.on('data', c => html += c);
+      res.on('end', () => {
+        try {
+          // Buscar el título en el HTML (meta tag o h1)
+          const metaMatch = html.match(/<meta[^>]*property="og:title"[^>]*content="([^"]+)"/i);
+          if (metaMatch && metaMatch[1]) {
+            console.log(`[Título real] ${metaMatch[1].slice(0, 50)}...`);
+            return resolve(metaMatch[1]);
+          }
+          // Fallback: buscar en el título de la página
+          const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
+          if (titleMatch && titleMatch[1]) {
+            const titulo = titleMatch[1].replace(/\s*-\s*SHEIN.*$/i, '').trim();
+            console.log(`[Título fallback] ${titulo.slice(0, 50)}...`);
+            return resolve(titulo);
+          }
+        } catch (e) {}
+        resolve(null);
+      });
+    }).on('error', () => resolve(null));
+  });
 }
 
 /* ============================================================
-   TRADUCCIÓN: Google gtx → MyMemory fallback
+   TRADUCCIÓN con Google Translate gtx
    ============================================================ */
 function translateText(text) {
   return new Promise((resolve) => {
     if (!text || typeof text !== 'string') return resolve(text || '');
     const t = text.trim();
     if (!t) return resolve('');
-    
-    // Si es texto latino simple, no traducir
-    if (/^[A-Za-z0-9\s.,;:!?()'"¡¿\-/%&]+$/.test(t) && t.length < 150) {
-      return resolve(t);
-    }
+    if (/^[A-Za-z0-9\s.,;:!?()'"¡¿\-/%&]+$/.test(t) && t.length < 150) return resolve(t);
 
-    // 1) Intentar Google Translate gtx
-    const gtxUrl = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=es&dt=t&q=${encodeURIComponent(t)}`;
-    https.get(gtxUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } }, (res) => {
+    const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=es&dt=t&q=${encodeURIComponent(t)}`;
+    https.get(url, { headers: { 'User-Agent': 'Mozilla/5.0' } }, (res) => {
       let data = '';
       res.on('data', c => data += c);
       res.on('end', () => {
@@ -57,32 +77,10 @@ function translateText(text) {
           const j = JSON.parse(data);
           if (j && Array.isArray(j[0])) {
             const tr = j[0].map(x => x[0]).join('');
-            if (tr && tr !== t && tr.length > 0) {
-              console.log(`[OK-gtx] "${t.slice(0, 30)}..." → "${tr.slice(0, 30)}..."`);
-              return resolve(tr);
-            }
+            if (tr && tr !== t && tr.length > 0) return resolve(tr);
           }
         } catch (e) {}
-        
-        // 2) Fallback: MyMemory con idioma detectado
-        const lang = detectarIdioma(t);
-        const mmUrl = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(t)}&langpair=${lang}|es`;
-        https.get(mmUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } }, (res2) => {
-          let data2 = '';
-          res2.on('data', c => data2 += c);
-          res2.on('end', () => {
-            try {
-              const j2 = JSON.parse(data2);
-              const tr2 = j2 && j2.responseData && j2.responseData.translatedText;
-              if (tr2 && tr2 !== t && !/MYMEMORY WARNING/i.test(tr2) && !/INVALID SOURCE LANGUAGE/i.test(tr2)) {
-                console.log(`[OK-mm] "${t.slice(0, 30)}..." → "${tr2.slice(0, 30)}..."`);
-                return resolve(tr2);
-              }
-            } catch (e) {}
-            console.log(`[FALLÓ] "${t.slice(0, 30)}..."`);
-            resolve(t);
-          });
-        }).on('error', () => resolve(t));
+        resolve(t);
       });
     }).on('error', () => resolve(t));
   });
@@ -127,7 +125,6 @@ function parseSheinCartOutput(output) {
       const s = current.url.match(/-p-(\d+)\.html/);
       if (s) {
         current.sku = s[1];
-        // NO generar URL de imagen (las URLs hardcoded no funcionan)
         current.img = '';
       } else {
         current.sku = `SHEIN-${current.index}`;
@@ -165,16 +162,8 @@ app.post('/api/cart', (req, res) => {
   const cmd = `npx --no-install shein-cart ${quoted}`;
   const started = Date.now();
 
-  console.log(`[CMD] ${cmd}`);
-
   exec(cmd, { timeout: 90000, maxBuffer: 20 * 1024 * 1024, shell: true }, async (err, stdout, stderr) => {
-    if (err) {
-      console.error('[ERROR]', err.message);
-      console.error('[STDERR]', stderr);
-      return res.status(500).json({ ok: false, error: 'Error consultando carrito.', detail: stderr });
-    }
-
-    console.log(`[STDOUT length] ${stdout.length} chars`);
+    if (err) return res.status(500).json({ ok: false, error: 'Error consultando carrito.', detail: stderr });
 
     const parsed = parseSheinCartOutput(stdout);
     console.log(`[Parse] ${parsed.items.length} items (header: ${parsed.itemsCount})`);
@@ -183,8 +172,19 @@ app.post('/api/cart', (req, res) => {
       return res.status(200).json({ ok: false, error: 'El carrito está vacío o expiró.', raw: stdout.slice(0, 800) });
     }
 
-    // Traducir en paralelo con logs
-    console.log(`[Traduciendo] ${parsed.items.length} productos...`);
+    // OBTENER TÍTULOS REALES de cada producto (en paralelo)
+    console.log(`[Obteniendo títulos reales] ${parsed.items.length} productos...`);
+    const titulosReales = await Promise.all(
+      parsed.items.map(it => obtenerTituloReal(it.url))
+    );
+    titulosReales.forEach((titulo, i) => {
+      if (titulo) {
+        parsed.items[i].nombreReal = titulo;
+        parsed.items[i].name = titulo; // Reemplazar con el título real
+      }
+    });
+
+    // Traducir en paralelo
     try {
       const t = await Promise.all(parsed.items.map(it =>
         Promise.all([translateText(it.name), translateText(it.variant), translateText(it.meta)])
@@ -194,10 +194,9 @@ app.post('/api/cart', (req, res) => {
         parsed.items[i].variant = variant;
         parsed.items[i].meta = meta;
       });
-      console.log('[Traducción completada]');
     } catch (e) { console.warn('[Error traduciendo]:', e.message); }
 
-    // Marcar agotados (NO filtrar)
+    // Marcar agotados
     for (const it of parsed.items) {
       const s = String(it.status || '').toLowerCase();
       it.outOfStock = /sold out|out of stock|agotado|indisponible|no disponible|unavailable/.test(s);
@@ -220,6 +219,6 @@ app.post('/api/cart', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`\n🛒 SHEIN Cart Viewer (texto + traducción gtx+mm)`);
+  console.log(`\n🛒 SHEIN Cart Viewer (títulos reales + traducción)`);
   console.log(`Abre http://localhost:${PORT}\n`);
 });
