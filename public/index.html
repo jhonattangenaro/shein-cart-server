@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>🛒 SHEIN Cart Viewer</title>
   <style>
-    /* ========== VARIABLES DE TEMA ========== */
     :root {
       --bg-primary: #f5f5f7;
       --bg-card: #ffffff;
@@ -29,8 +28,6 @@
       --btn-secondary-text: #1d1d1f;
       --hist-bg: #ffffff;
       --hist-border: #e5e5ea;
-      --toggle-bg: #e5e5ea;
-      --toggle-knob: #ffffff;
       --btn-danger-bg: #fff0f0;
       --btn-danger-border: #ffd0d0;
       --btn-danger-text: #ff3b30;
@@ -59,14 +56,11 @@
       --btn-secondary-text: #f5f5f7;
       --hist-bg: #1c1c1e;
       --hist-border: #38383a;
-      --toggle-bg: #38383a;
-      --toggle-knob: #f5f5f7;
       --btn-danger-bg: #3d1a1a;
       --btn-danger-border: #5c2a2a;
       --btn-danger-text: #ff6b6b;
     }
 
-    /* ========== RESET & BASE ========== */
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -79,7 +73,6 @@
 
     .container { max-width: 1200px; margin: 0 auto; }
 
-    /* ========== HEADER ========== */
     .header {
       display: flex;
       justify-content: space-between;
@@ -101,7 +94,6 @@
       margin-top: 4px;
     }
 
-    /* ========== TOGGLE MODO ========== */
     .theme-toggle {
       display: flex;
       align-items: center;
@@ -127,7 +119,6 @@
       color: var(--text-primary);
     }
 
-    /* ========== CARDS ========== */
     .card {
       background: var(--bg-card);
       border-radius: 16px;
@@ -144,7 +135,6 @@
       color: var(--text-primary);
     }
 
-    /* ========== INPUT URL ========== */
     .url-row {
       display: flex;
       gap: 12px;
@@ -166,7 +156,6 @@
     }
     .url-row input::placeholder { color: var(--text-muted); }
 
-    /* ========== BOTONES ========== */
     .btn {
       padding: 14px 24px;
       border: none;
@@ -222,7 +211,6 @@
       margin-top: 8px;
     }
 
-    /* ========== STATUS ========== */
     .status {
       padding: 12px 16px;
       border-radius: 10px;
@@ -240,7 +228,6 @@
     [data-theme="dark"] .status.success { background: #1a3d2a; color: #5dd87a; }
     [data-theme="dark"] .status.error { background: #3d1a1a; color: #f86d6d; }
 
-    /* ========== SUMMARY ========== */
     .summary {
       display: flex;
       gap: 24px;
@@ -267,7 +254,6 @@
     }
     .summary-item .value.total { color: var(--accent); }
 
-    /* ========== GRID PRODUCTOS ========== */
     .grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
@@ -286,6 +272,8 @@
       box-shadow: var(--shadow-hover);
       transform: translateY(-2px);
     }
+    .product.sold-out { opacity: 0.55; filter: grayscale(0.7); }
+    .product.sold-out .product-img { opacity: 0.6; }
     .product-img {
       width: 100%;
       height: 260px;
@@ -356,6 +344,17 @@
       color: var(--warning);
       font-style: italic;
     }
+    .sold-badge {
+      margin-top: 6px;
+      background: var(--btn-danger-bg);
+      color: var(--btn-danger-text);
+      border: 1px solid var(--btn-danger-border);
+      font-size: 11px;
+      font-weight: 600;
+      padding: 5px 10px;
+      border-radius: 8px;
+      text-align: center;
+    }
     .product-link {
       display: block;
       text-align: center;
@@ -383,7 +382,6 @@
     }
     .btn-copy:hover { background: var(--border); }
 
-    /* ========== HISTORIAL ========== */
     .hist-header {
       display: flex;
       justify-content: space-between;
@@ -428,7 +426,6 @@
       font-size: 14px;
     }
 
-    /* ========== TOAST ========== */
     .toast {
       position: fixed;
       bottom: 24px;
@@ -451,7 +448,6 @@
       transform: translateX(-50%) translateY(0);
     }
 
-    /* ========== EMPTY ========== */
     .empty-state {
       text-align: center;
       padding: 40px 20px;
@@ -460,7 +456,6 @@
     .empty-state .icon { font-size: 48px; margin-bottom: 12px; }
     .empty-state p { font-size: 14px; }
 
-    /* ========== RESPONSIVE ========== */
     @media (max-width: 600px) {
       .header { flex-direction: column; gap: 12px; align-items: flex-start; }
       .url-row { flex-direction: column; }
@@ -472,7 +467,6 @@
 </head>
 <body>
   <div class="container">
-    <!-- HEADER CON TOGGLE -->
     <div class="header">
       <div>
         <h1>🛒 SHEIN Cart Viewer</h1>
@@ -484,7 +478,6 @@
       </div>
     </div>
 
-    <!-- CONSULTA -->
     <div class="card">
       <h2>🔗 Enlace del carrito</h2>
       <div class="url-row">
@@ -504,14 +497,12 @@
       <div id="status" class="status"></div>
     </div>
 
-    <!-- RESULTADOS -->
     <div class="card" id="resultsCard" style="display:none">
       <h2>📦 Productos</h2>
       <div class="summary" id="summary"></div>
       <div class="grid" id="grid"></div>
     </div>
 
-    <!-- HISTORIAL -->
     <div class="card">
       <div class="hist-header">
         <h2>🕐 Historial de consultas</h2>
@@ -528,7 +519,6 @@
   <script>
     let ultimo = null;
 
-    /* ========== MODO CLARO/OSCURO ========== */
     function initTheme() {
       const saved = localStorage.getItem('shein-theme');
       const theme = saved || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
@@ -553,7 +543,6 @@
     });
     initTheme();
 
-    /* ========== STATUS & TOAST ========== */
     function setStatus(type, msg) {
       const el = document.getElementById('status');
       el.className = 'status show ' + type;
@@ -569,7 +558,6 @@
       setTimeout(() => t.classList.remove('show'), 2200);
     }
 
-    /* ========== CONSULTAR ========== */
     function consultar() {
       const url = document.getElementById('url').value.trim();
       if (!url) { setStatus('error', '⚠️ Pega un enlace de SHEIN.'); return; }
@@ -599,7 +587,8 @@
         guardarHistorial(data);
         document.getElementById('btnExcel').disabled = false;
         document.getElementById('btnJson').disabled = false;
-        setStatus('success', `✅ ${data.itemsCount} productos · Total $${(data.total||0).toFixed(2)} · ${data.ms ? Math.round(data.ms/1000)+'s' : ''}`);
+        const agotados = (data.items || []).filter(it => it.outOfStock).length;
+        setStatus('success', `✅ ${data.itemsCount} productos${agotados ? ` (${agotados} agotados)` : ''} · Total disponible $${(data.total||0).toFixed(2)} · ${data.ms ? Math.round(data.ms/1000)+'s' : ''}`);
       })
       .catch(err => {
         btn.disabled = false;
@@ -607,7 +596,6 @@
       });
     }
 
-    /* ========== RENDER ========== */
     function render(data) {
       document.getElementById('resultsCard').style.display = 'block';
 
@@ -633,7 +621,7 @@
       }
 
       grid.innerHTML = data.items.map((it, i) => `
-        <div class="product">
+        <div class="product ${it.outOfStock ? 'sold-out' : ''}">
           <img class="product-img" src="${it.img || ''}" alt="${esc(it.name)}" onerror="this.style.display='none'">
           <div class="product-body">
             <div class="product-header">
@@ -650,13 +638,13 @@
             ${it.meta ? `<div class="product-variant">${esc(it.meta)}</div>` : ''}
             ${it.status ? `<div class="product-status">${esc(it.status)}</div>` : ''}
             ${it.sku ? `<div class="product-sku">SKU: ${esc(it.sku)}</div>` : ''}
+            ${it.outOfStock ? `<div class="sold-badge">🚫 Agotado en esta región</div>` : ''}
           </div>
           ${it.url ? `<a class="product-link" href="${it.url}" target="_blank" rel="noopener">Ver en SHEIN →</a>` : ''}
         </div>
       `).join('');
     }
 
-    /* ========== COPIAR TODO (Excel) ========== */
     function copiarExcel() {
       if (!ultimo) return;
       const cab = ['#', 'SKU', 'Producto', 'Variante', 'Meta', 'Precio', 'Original', 'Descuento%', 'Status', 'URL'];
@@ -693,7 +681,6 @@
       document.body.removeChild(ta);
     }
 
-    /* ========== EXPORTAR JSON ========== */
     function exportarJson() {
       if (!ultimo) return;
       const payload = {
@@ -713,7 +700,6 @@
       toast('⬇️ JSON descargado');
     }
 
-    /* ========== HISTORIAL ========== */
     function guardarHistorial(data) {
       const url = document.getElementById('url').value.trim();
       const h = JSON.parse(localStorage.getItem('sheinHist') || '[]');
@@ -732,10 +718,7 @@
       const h = JSON.parse(localStorage.getItem('sheinHist') || '[]');
       const box = document.getElementById('histList');
       const btnClear = document.getElementById('btnClearHist');
-      
-      // Mostrar/ocultar botón de limpiar
       btnClear.style.display = h.length > 0 ? 'inline-flex' : 'none';
-      
       if (!h.length) {
         box.innerHTML = '<div class="hist-empty">📭 Sin consultas todavía.</div>';
         return;
