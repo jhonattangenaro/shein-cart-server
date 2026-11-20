@@ -2,6 +2,7 @@ const express = require('express');
 const { exec } = require('child_process');
 const path = require('path');
 const https = require('https');
+const puppeteer = require('puppeteer');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -21,53 +22,68 @@ app.use((req, res, next) => {
 app.get('/api/health', (req, res) => res.json({ ok: true, ts: Date.now() }));
 
 /* ============================================================
-   OBTENER TÍTULO REAL desde la URL del producto en SHEIN
+   OBTENER TÍTULO REAL con Puppeteer (ejecuta JavaScript)
    ============================================================ */
-function obtenerTituloReal(url) {
-  return new Promise((resolve) => {
-    if (!url || !url.includes('shein.com')) return resolve(null);
+async function obtenerTituloReal(url) {
+  if (!url || !url.includes('shein.com')) return null;
+  
+  let browser;
+  try {
+    browser = await puppeteer.launch({
+      headless: true,
+      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+    });
+    const page = await browser.newPage();
+    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
+    await page.setExtraHTTPHeaders({ 'Accept-Language': 'es-ES,es;q=0.9' });
     
-    https.get(url, { 
-      headers: { 
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Accept-Language': 'es-ES,es;q=0.9'
-      },
-      timeout: 8000
-    }, (res) => {
-      let html = '';
-      res.on('data', c => html += c);
-      res.on('end', () => {
-        try {
-          // Buscar og:title (título oficial de SHEIN)
-          const metaMatch = html.match(/<meta[^>]*property="og:title"[^>]*content="([^"]+)"/i);
-          if (metaMatch && metaMatch[1]) {
-            console.log(`[Título real] ${metaMatch[1].slice(0, 60)}...`);
-            return resolve(metaMatch[1]);
-          }
-          // Fallback: buscar en <title>
-          const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
-          if (titleMatch && titleMatch[1]) {
-            const titulo = titleMatch[1].replace(/\s*-\s*SHEIN.*$/i, '').trim();
-            console.log(`[Título fallback] ${titulo.slice(0, 60)}...`);
-            return resolve(titulo);
-          }
-        } catch (e) {}
-        resolve(null);
-      });
-    }).on('error', () => resolve(null));
-  });
+    await page.goto(url, { waitUntil: 'networkidle2', timeout: 15000 });
+    
+    // Esperar a que el título se cargue
+    await page.waitForSelector('h1, .product-title, [data-spm="product_title"]', { timeout: 5000 }).catch(() => {});
+    
+    // Intentar múltiples selectores
+    const titulo = await page.evaluate(() => {
+      // 1. Meta tag og:title
+      const ogTitle = document.querySelector('meta[property="og:title"]');
+      if (ogTitle && ogTitle.content) return ogTitle.content;
+      
+      // 2. Título de la página
+      if (document.title && !document.title.includes('Error')) return document.title.replace(/\s*-\s*SHEIN.*$/i, '').trim();
+      
+      // 3. H1 o elementos de título
+      const h1 = document.querySelector('h1');
+      if (h1 && h1.textContent.trim()) return h1.textContent.trim();
+      
+      const productTitle = document.querySelector('.product-title, [data-spm="product_title"]');
+      if (productTitle && productTitle.textContent.trim()) return productTitle.textContent.trim();
+      
+      return null;
+    });
+    
+    if (titulo && titulo.length > 10) {
+      console.log(`[OK] ${titulo.slice(0, 60)}...`);
+      return titulo;
+    }
+    
+    return null;
+  } catch (e) {
+    console.log(`[ERROR Puppeteer] ${e.message}`);
+    return null;
+  } finally {
+    if (browser) await browser.close();
+  }
 }
 
 /* ============================================================
-   TRADUCCIÓN con Google Translate gtx (solo si es necesario)
+   TRADUCCIÓN con Google Translate gtx
    ============================================================ */
 function translateText(text) {
   return new Promise((resolve) => {
     if (!text || typeof text !== 'string') return resolve(text || '');
     const t = text.trim();
     if (!t) return resolve('');
-    // Si es texto latino simple, no traducir
-    if (/^[A-Za-z0-9\s.,;:!?()'"¡¿\-/%&]+$/.test(t) && t.length < 200) return resolve(t);
+    if (/^[A-Za-z0-9\s.,;:!?()'"¡¿\-/%&]+$/.test(t) && t.length < 150) return resolve(t);
 
     const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=es&dt=t&q=${encodeURIComponent(t)}`;
     https.get(url, { headers: { 'User-Agent': 'Mozilla/5.0' } }, (res) => {
@@ -173,28 +189,29 @@ app.post('/api/cart', (req, res) => {
       return res.status(200).json({ ok: false, error: 'El carrito está vacío o expiró.', raw: stdout.slice(0, 800) });
     }
 
-    // OBTENER TÍTULOS REALES de cada producto
+    // OBTENER TÍTULOS REALES con Puppeteer (en paralelo, máximo 3 a la vez)
     console.log(`[Obteniendo títulos reales] ${parsed.items.length} productos...`);
-    const titulosReales = await Promise.all(
-      parsed.items.map(it => obtenerTituloReal(it.url))
-    );
-    
-    // Reemplazar nombres con títulos reales (si se obtuvieron)
-    titulosReales.forEach((titulo, i) => {
-      if (titulo) {
-        parsed.items[i].nombreReal = titulo;
-        parsed.items[i].name = titulo; // Usar título real
-        console.log(`[OK] Producto #${i+1}: ${titulo.slice(0, 50)}...`);
-      } else {
-        console.log(`[FALLÓ] Producto #${i+1}: usando nombre original`);
-      }
-    });
+    const batchSize = 3;
+    for (let i = 0; i < parsed.items.length; i += batchSize) {
+      const batch = parsed.items.slice(i, i + batchSize);
+      const titulos = await Promise.all(batch.map(it => obtenerTituloReal(it.url)));
+      titulos.forEach((titulo, j) => {
+        const idx = i + j;
+        if (titulo) {
+          parsed.items[idx].nombreReal = titulo;
+          parsed.items[idx].name = titulo;
+          console.log(`[OK] Producto #${idx+1}: ${titulo.slice(0, 50)}...`);
+        } else {
+          console.log(`[FALLÓ] Producto #${idx+1}: usando nombre original`);
+        }
+      });
+    }
 
-    // Traducir SOLO variant y meta (el nombre ya está en español)
+    // Traducir SOLO variant y meta (el nombre ya tiene el título real)
     try {
       const t = await Promise.all(parsed.items.map(it =>
         Promise.all([
-          Promise.resolve(it.name), // Ya tiene el título real, no traducir
+          Promise.resolve(it.name),
           translateText(it.variant),
           translateText(it.meta)
         ])
@@ -229,6 +246,6 @@ app.post('/api/cart', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`\n🛒 SHEIN Cart Viewer (títulos reales desde SHEIN)`);
+  console.log(`\n🛒 SHEIN Cart Viewer (Puppeteer para títulos reales)`);
   console.log(`Abre http://localhost:${PORT}\n`);
 });
