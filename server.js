@@ -22,7 +22,7 @@ app.use((req, res, next) => {
 app.get('/api/health', (req, res) => res.json({ ok: true, ts: Date.now() }));
 
 /* ============================================================
-   OBTENER TÍTULO REAL con Puppeteer (ejecuta JavaScript)
+   OBTENER TÍTULO REAL con Puppeteer
    ============================================================ */
 async function obtenerTituloReal(url) {
   if (!url || !url.includes('shein.com')) return null;
@@ -31,27 +31,34 @@ async function obtenerTituloReal(url) {
   try {
     browser = await puppeteer.launch({
       headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium',
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-gpu',
+        '--disable-web-security',
+        '--disable-features=IsolateOrigins,site-per-process'
+      ]
     });
     const page = await browser.newPage();
-    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
-    await page.setExtraHTTPHeaders({ 'Accept-Language': 'es-ES,es;q=0.9' });
+    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+    await page.setExtraHTTPHeaders({ 
+      'Accept-Language': 'es-ES,es;q=0.9,en;q=0.8',
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8'
+    });
     
     await page.goto(url, { waitUntil: 'networkidle2', timeout: 15000 });
-    
-    // Esperar a que el título se cargue
     await page.waitForSelector('h1, .product-title, [data-spm="product_title"]', { timeout: 5000 }).catch(() => {});
     
-    // Intentar múltiples selectores
     const titulo = await page.evaluate(() => {
-      // 1. Meta tag og:title
       const ogTitle = document.querySelector('meta[property="og:title"]');
       if (ogTitle && ogTitle.content) return ogTitle.content;
       
-      // 2. Título de la página
-      if (document.title && !document.title.includes('Error')) return document.title.replace(/\s*-\s*SHEIN.*$/i, '').trim();
+      if (document.title && !document.title.includes('Error')) {
+        return document.title.replace(/\s*-\s*SHEIN.*$/i, '').trim();
+      }
       
-      // 3. H1 o elementos de título
       const h1 = document.querySelector('h1');
       if (h1 && h1.textContent.trim()) return h1.textContent.trim();
       
@@ -189,7 +196,7 @@ app.post('/api/cart', (req, res) => {
       return res.status(200).json({ ok: false, error: 'El carrito está vacío o expiró.', raw: stdout.slice(0, 800) });
     }
 
-    // OBTENER TÍTULOS REALES con Puppeteer (en paralelo, máximo 3 a la vez)
+    // OBTENER TÍTULOS REALES con Puppeteer (en lotes de 3)
     console.log(`[Obteniendo títulos reales] ${parsed.items.length} productos...`);
     const batchSize = 3;
     for (let i = 0; i < parsed.items.length; i += batchSize) {
@@ -223,7 +230,7 @@ app.post('/api/cart', (req, res) => {
       });
     } catch (e) { console.warn('[Error traduciendo]:', e.message); }
 
-    // Marcar agotados
+    // Marcar agotados (NO filtrar)
     for (const it of parsed.items) {
       const s = String(it.status || '').toLowerCase();
       it.outOfStock = /sold out|out of stock|agotado|indisponible|no disponible|unavailable/.test(s);
