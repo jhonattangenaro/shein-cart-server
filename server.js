@@ -2,7 +2,12 @@ const express = require('express');
 const { exec } = require('child_process');
 const path = require('path');
 const https = require('https');
-const puppeteer = require('puppeteer');
+const puppeteer = require('puppeteer-extra');
+const StealthPlugin = require('puppeteer-extra-plugin-stealth');
+const chromium = require('@sparticuz/chromium');
+
+puppeteer.use(StealthPlugin());
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -22,57 +27,54 @@ app.use((req, res, next) => {
 app.get('/api/health', (req, res) => res.json({ ok: true, ts: Date.now() }));
 
 /* ============================================================
-   OBTENER TÍTULO REAL con Puppeteer
+   OBTENER TÍTULO REAL con Puppeteer + @sparticuz/chromium
    ============================================================ */
 async function obtenerTituloReal(url) {
   if (!url || !url.includes('shein.com')) return null;
-  
+
   let browser;
   try {
     browser = await puppeteer.launch({
-      headless: true,
-      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium',
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-gpu',
-        '--disable-web-security',
-        '--disable-features=IsolateOrigins,site-per-process'
-      ]
+      args: [...chromium.args, '--no-sandbox', '--disable-setuid-sandbox'],
+      defaultViewport: chromium.defaultViewport,
+      executablePath: await chromium.executablePath(),
+      headless: chromium.headless,
+      ignoreHTTPSErrors: true,
     });
+
     const page = await browser.newPage();
-    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
-    await page.setExtraHTTPHeaders({ 
+    await page.setUserAgent(
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    );
+    await page.setExtraHTTPHeaders({
       'Accept-Language': 'es-ES,es;q=0.9,en;q=0.8',
       'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8'
     });
-    
-    await page.goto(url, { waitUntil: 'networkidle2', timeout: 15000 });
+
+    await page.goto(url, { waitUntil: 'networkidle2', timeout: 20000 });
     await page.waitForSelector('h1, .product-title, [data-spm="product_title"]', { timeout: 5000 }).catch(() => {});
-    
+
     const titulo = await page.evaluate(() => {
       const ogTitle = document.querySelector('meta[property="og:title"]');
       if (ogTitle && ogTitle.content) return ogTitle.content;
-      
+
       if (document.title && !document.title.includes('Error')) {
         return document.title.replace(/\s*-\s*SHEIN.*$/i, '').trim();
       }
-      
+
       const h1 = document.querySelector('h1');
       if (h1 && h1.textContent.trim()) return h1.textContent.trim();
-      
+
       const productTitle = document.querySelector('.product-title, [data-spm="product_title"]');
       if (productTitle && productTitle.textContent.trim()) return productTitle.textContent.trim();
-      
+
       return null;
     });
-    
+
     if (titulo && titulo.length > 10) {
-      console.log(`[OK] ${titulo.slice(0, 60)}...`);
+      console.log(`[Título real] ${titulo.slice(0, 60)}...`);
       return titulo;
     }
-    
     return null;
   } catch (e) {
     console.log(`[ERROR Puppeteer] ${e.message}`);
@@ -83,7 +85,7 @@ async function obtenerTituloReal(url) {
 }
 
 /* ============================================================
-   TRADUCCIÓN con Google Translate gtx
+   TRADUCCIÓN con Google Translate gtx (https nativo)
    ============================================================ */
 function translateText(text) {
   return new Promise((resolve) => {
@@ -101,7 +103,10 @@ function translateText(text) {
           const j = JSON.parse(data);
           if (j && Array.isArray(j[0])) {
             const tr = j[0].map(x => x[0]).join('');
-            if (tr && tr !== t && tr.length > 0) return resolve(tr);
+            if (tr && tr !== t && tr.length > 0) {
+              console.log(`[OK] "${t.slice(0, 40)}..." → "${tr.slice(0, 40)}..."`);
+              return resolve(tr);
+            }
           }
         } catch (e) {}
         resolve(t);
@@ -111,7 +116,7 @@ function translateText(text) {
 }
 
 /* ============================================================
-   PARSER DE TEXTO
+   PARSER DE TEXTO (el que SÍ funciona)
    ============================================================ */
 function parseSheinCartOutput(output) {
   const result = { sharedBy: '', total: null, itemsCount: 0, items: [] };
@@ -253,6 +258,6 @@ app.post('/api/cart', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`\n🛒 SHEIN Cart Viewer (Puppeteer para títulos reales)`);
+  console.log(`\n🛒 SHEIN Cart Viewer (@sparticuz/chromium + títulos reales)`);
   console.log(`Abre http://localhost:${PORT}\n`);
 });
