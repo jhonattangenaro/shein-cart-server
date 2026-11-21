@@ -21,16 +21,22 @@ app.use((req, res, next) => {
 app.get('/api/health', (req, res) => res.json({ ok: true, ts: Date.now() }));
 
 /* ============================================================
-   TRADUCCIÓN con Google Translate gtx
+   TRADUCCIÓN con https.get nativo (NO fetch)
    ============================================================ */
 function translateText(text) {
   return new Promise((resolve) => {
     if (!text || typeof text !== 'string') return resolve(text || '');
     const t = text.trim();
     if (!t) return resolve('');
-    if (/^[A-Za-z0-9\s.,;:!?()'"¡¿\-/%&]+$/.test(t) && t.length < 200) return resolve(t);
+    
+    // Si es texto latino simple, no traducir
+    if (/^[A-Za-z0-9\s.,;:!?()'"¡¿\-/%&]+$/.test(t) && t.length < 200) {
+      console.log(`[Skip] "${t.slice(0, 40)}..." (ya es latino)`);
+      return resolve(t);
+    }
 
     const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=es&dt=t&q=${encodeURIComponent(t)}`;
+    
     https.get(url, { headers: { 'User-Agent': 'Mozilla/5.0' } }, (res) => {
       let data = '';
       res.on('data', c => data += c);
@@ -40,19 +46,25 @@ function translateText(text) {
           if (j && Array.isArray(j[0])) {
             const tr = j[0].map(x => x[0]).join('');
             if (tr && tr !== t && tr.length > 0) {
-              console.log(`[OK] "${t.slice(0, 40)}..." → "${tr.slice(0, 40)}..."`);
+              console.log(`[OK] "${t.slice(0, 30)}..." → "${tr.slice(0, 30)}..."`);
               return resolve(tr);
             }
           }
-        } catch (e) {}
+          console.log(`[FALLÓ] "${t.slice(0, 30)}..." (respuesta: ${data.slice(0, 100)})`);
+        } catch (e) {
+          console.log(`[ERROR parse] ${e.message}`);
+        }
         resolve(t);
       });
-    }).on('error', () => resolve(t));
+    }).on('error', (err) => {
+      console.log(`[ERROR HTTP] ${err.message}`);
+      resolve(t);
+    });
   });
 }
 
 /* ============================================================
-   PARSER DE TEXTO de shein-cart CLI
+   PARSER DE TEXTO
    ============================================================ */
 function parseSheinCartOutput(output) {
   const result = { sharedBy: '', total: null, itemsCount: 0, items: [] };
@@ -137,28 +149,24 @@ app.post('/api/cart', (req, res) => {
       return res.status(200).json({ ok: false, error: 'El carrito está vacío o expiró.', raw: stdout.slice(0, 800) });
     }
 
-    // TRADUCIR todos los campos de texto en paralelo
+    // TRADUCIR todos los campos de texto
     console.log(`[Traduciendo] ${parsed.items.length} productos...`);
+    console.log(`[DEBUG] Primer producto antes de traducir: "${parsed.items[0].name.slice(0, 50)}..."`);
+    
     try {
-      const traducciones = await Promise.all(
-        parsed.items.map(it => 
-          Promise.all([
-            translateText(it.name),
-            translateText(it.variant),
-            translateText(it.meta)
-          ])
-        )
-      );
-      
-      traducciones.forEach(([name, variant, meta], i) => {
-        parsed.items[i].name = name;
-        parsed.items[i].variant = variant;
-        parsed.items[i].meta = meta;
-      });
+      for (let i = 0; i < parsed.items.length; i++) {
+        const it = parsed.items[i];
+        it.name = await translateText(it.name);
+        it.variant = await translateText(it.variant);
+        it.meta = await translateText(it.meta);
+        console.log(`[Producto #${i+1}] name="${it.name.slice(0, 40)}..."`);
+      }
       console.log('[Traducción completada]');
     } catch (e) {
       console.warn('[Error traduciendo]:', e.message);
     }
+
+    console.log(`[DEBUG] Primer producto después de traducir: "${parsed.items[0].name.slice(0, 50)}..."`);
 
     // Marcar agotados (NO filtrar)
     for (const it of parsed.items) {
@@ -183,6 +191,6 @@ app.post('/api/cart', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`\n🛒 SHEIN Cart Viewer (shein-cart CLI + traducción)`);
+  console.log(`\n🛒 SHEIN Cart Viewer (https.get nativo + logs detallados)`);
   console.log(`Abre http://localhost:${PORT}\n`);
 });
