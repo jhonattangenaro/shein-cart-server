@@ -9,59 +9,30 @@
      VARIABLES DE TEMA (Oscuro por defecto)
      ========================================= */
   :root {
-    --bg-body: #121212;
-    --bg-card: #1e1e1e;
-    --bg-input: #2c2c2c;
-    --bg-panel: #1e1e1e;
-    --text-main: #e0e0e0;
-    --text-muted: #999;
-    --text-bright: #ffffff;
-    --border-color: #333;
-    --border-light: #444;
-    --accent: #ff2d55;
-    --accent-hover: #e02549;
-    --status-loading-bg: #1a1a2e;
-    --status-loading-text: #aab;
-    --status-error-bg: #3a1a1a;
-    --status-error-text: #f88;
-    --status-ok-bg: #1b3624;
-    --status-ok-text: #8f8;
-    --sku-bg: #1a2a3a;
-    --sku-text: #66b2ff;
-    --btn-excel-bg: #217346;
-    --btn-excel-hover: #1a5c38;
+    --bg-body: #121212; --bg-card: #1e1e1e; --bg-input: #2c2c2c; --bg-panel: #1e1e1e;
+    --text-main: #e0e0e0; --text-muted: #999; --text-bright: #ffffff;
+    --border-color: #333; --border-light: #444; --accent: #ff2d55; --accent-hover: #e02549;
+    --status-loading-bg: #1a1a2e; --status-loading-text: #aab;
+    --status-error-bg: #3a1a1a; --status-error-text: #f88;
+    --status-ok-bg: #1b3624; --status-ok-text: #8f8;
+    --sku-bg: #1a2a3a; --sku-text: #66b2ff;
+    --btn-excel-bg: #217346; --btn-excel-hover: #1a5c38;
     --card-shadow: 0 1px 3px rgba(0,0,0,.3);
   }
 
   /* Variables para el Modo Claro */
   [data-theme="light"] {
-    --bg-body: #f5f5f7;
-    --bg-card: #ffffff;
-    --bg-input: #ffffff;
-    --bg-panel: #ffffff;
-    --text-main: #1d1d1f;
-    --text-muted: #666;
-    --text-bright: #000000;
-    --border-color: #ddd;
-    --border-light: #eee;
-    --accent: #ff2d55;
-    --accent-hover: #e02549;
-    --status-loading-bg: #eef;
-    --status-loading-text: #334;
-    --status-error-bg: #fee;
-    --status-error-text: #a11;
-    --status-ok-bg: #efe;
-    --status-ok-text: #161;
-    --sku-bg: #f0f8ff;
-    --sku-text: #0066cc;
-    --btn-excel-bg: #217346;
-    --btn-excel-hover: #1a5c38;
+    --bg-body: #f5f5f7; --bg-card: #ffffff; --bg-input: #ffffff; --bg-panel: #ffffff;
+    --text-main: #1d1d1f; --text-muted: #666; --text-bright: #000000;
+    --border-color: #ddd; --border-light: #eee; --accent: #ff2d55; --accent-hover: #e02549;
+    --status-loading-bg: #eef; --status-loading-text: #334;
+    --status-error-bg: #fee; --status-error-text: #a11;
+    --status-ok-bg: #efe; --status-ok-text: #161;
+    --sku-bg: #f0f8ff; --sku-text: #0066cc;
+    --btn-excel-bg: #217346; --btn-excel-hover: #1a5c38;
     --card-shadow: 0 1px 3px rgba(0,0,0,.06);
   }
 
-  /* =========================================
-     ESTILOS GENERALES
-     ========================================= */
   * { box-sizing: border-box; transition: background-color 0.3s, color 0.3s; }
   body { margin: 0; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; background: var(--bg-body); color: var(--text-main); min-height: 100vh; }
   
@@ -69,29 +40,10 @@
   header h1 { margin: 0 0 8px; font-size: 1.8rem; color: var(--text-bright); }
   header p { margin: 0; color: var(--text-muted); font-size: 0.95rem; }
   
-  /* Botón de Tema */
-  .theme-toggle {
-    position: absolute;
-    top: 30px;
-    right: 20px;
-    background: var(--bg-card);
-    border: 1px solid var(--border-color);
-    color: var(--text-main);
-    padding: 8px 16px;
-    border-radius: 20px;
-    cursor: pointer;
-    font-size: 0.9rem;
-    font-weight: 600;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    box-shadow: var(--card-shadow);
-  }
+  .theme-toggle { position: absolute; top: 30px; right: 20px; background: var(--bg-card); border: 1px solid var(--border-color); color: var(--text-main); padding: 8px 16px; border-radius: 20px; cursor: pointer; font-size: 0.9rem; font-weight: 600; display: flex; align-items: center; gap: 8px; box-shadow: var(--card-shadow); }
   .theme-toggle:hover { border-color: var(--accent); }
 
   main { max-width: 1200px; margin: 0 auto; padding: 20px; }
-
-  /* Buscador */
   .search { display: flex; gap: 10px; margin-bottom: 20px; }
   .search input { flex: 1; padding: 14px 16px; border: 2px solid var(--border-color); border-radius: 12px; font-size: 1rem; outline: none; background: var(--bg-input); color: var(--text-main); }
   .search input:focus { border-color: var(--accent); }
@@ -99,7 +51,6 @@
   .search button:hover { background: var(--accent-hover); }
   .search button:disabled { background: #555; cursor: not-allowed; }
 
-  /* Estados y Mensajes */
   #status { margin-bottom: 20px; }
   .loading, .error, .ok { padding: 14px 18px; border-radius: 12px; font-size: .95rem; }
   .loading { background: var(--status-loading-bg); color: var(--status-loading-text); }
@@ -108,7 +59,6 @@
   .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--status-loading-text); border-top-color: transparent; border-radius: 50%; animation: spin .8s linear infinite; vertical-align: middle; margin-left: 8px; }
   @keyframes spin { to { transform: rotate(360deg); } }
 
-  /* Resultados */
   .summary { display: flex; gap: 24px; flex-wrap: wrap; padding: 18px 22px; background: var(--bg-card); border-radius: 14px; box-shadow: var(--card-shadow); margin-bottom: 16px; font-size: 1.05rem; }
   .summary strong { color: var(--accent); }
   
@@ -185,43 +135,38 @@
 </main>
 
 <script>
-/* =========================================
-   GESTIÓN DEL TEMA (Oscuro/Claro)
-   ========================================= */
+/* GESTIÓN DEL TEMA */
 const themeToggle = document.getElementById('themeToggle');
 const themeIcon = document.getElementById('themeIcon');
 const themeText = document.getElementById('themeText');
 let currentTheme = localStorage.getItem('shein_theme') || 'dark';
-
 function applyTheme(theme) {
   document.documentElement.setAttribute('data-theme', theme);
-  if (theme === 'dark') {
-    themeIcon.textContent = '🌙';
-    themeText.textContent = 'Modo Oscuro';
-  } else {
-    themeIcon.textContent = '☀️';
-    themeText.textContent = 'Modo Claro';
-  }
+  themeIcon.textContent = theme === 'dark' ? '🌙' : '☀️';
+  themeText.textContent = theme === 'dark' ? 'Modo Oscuro' : 'Modo Claro';
   localStorage.setItem('shein_theme', theme);
 }
-
-function toggleTheme() {
-  currentTheme = currentTheme === 'dark' ? 'light' : 'dark';
-  applyTheme(currentTheme);
-}
-
+function toggleTheme() { currentTheme = currentTheme === 'dark' ? 'light' : 'dark'; applyTheme(currentTheme); }
 applyTheme(currentTheme);
 
-/* =========================================
-   LÓGICA DE LA APLICACIÓN
-   ========================================= */
 const $ = (id) => document.getElementById(id);
 const input = $('url'), btn = $('btn'), status = $('status');
 const results = $('results'), summary = $('summary'), grid = $('grid');
 const historySection = $('history'), historyList = $('historyList');
-let lastData = null;
-let lastClickedIndex = null;
-let currentLoadedUrl = ''; // Guarda la URL del carrito actual para actualizar el historial
+let lastData = null, lastClickedIndex = null, currentLoadedUrl = '';
+
+/* TRADUCTOR AUTOMÁTICO AL ESPAÑOL */
+async function traducirTexto(texto) {
+  try {
+    const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=es&dt=t&q=${encodeURIComponent(texto)}`;
+    const res = await fetch(url);
+    const data = await res.json();
+    return data[0].map(item => item[0]).join('');
+  } catch (e) {
+    console.warn("Error al traducir:", e);
+    return texto; 
+  }
+}
 
 async function consultar(url) {
   if (!url) return;
@@ -235,25 +180,40 @@ async function consultar(url) {
       body: JSON.stringify({ url }),
     });
     const data = await res.json();
-    if (!data.ok) {
-      status.innerHTML = `<div class="error">❌ ${escapeHtml(data.error)}${data.detail ? `<br><small>${escapeHtml(data.detail)}</small>` : ''}</div>`;
-      return;
+    if (!data.ok) { status.innerHTML = `<div class="error">❌ ${escapeHtml(data.error)}</div>`; return; }
+    
+    /* 
+    =========================================================
+    AQUÍ SUCEDE LA MAGIA: Traducimos los títulos iniciales 
+    justo después de que el backend responde, antes de mostrarlos.
+    =========================================================
+    */
+    status.innerHTML = '<div class="loading">Detectando idioma y traduciendo títulos... <span class="spinner"></span></div>';
+    
+    for (let i = 0; i < data.items.length; i++) {
+      const item = data.items[i];
+      // Si el título tiene caracteres japoneses (Kanji, Hiragana, Katakana)
+      const esJapones = /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff]/.test(item.name);
+      
+      if (esJapones) {
+        item.name = await traducirTexto(item.name);
+        if (item.variant) {
+          item.variant = await traducirTexto(item.variant);
+        }
+      }
     }
+
     lastData = data;
     currentLoadedUrl = url;
-    status.innerHTML = `<div class="ok">✅ ${data.items.length} productos disponibles extraídos (${data.ms} ms)</div>`;
+    status.innerHTML = `<div class="ok">✅ ${data.items.length} productos extraídos y traducidos correctamente (${data.ms} ms)</div>`;
     render(data);
     addHistory(url, data);
   } catch (e) {
     status.innerHTML = `<div class="error">❌ Error de red: ${escapeHtml(e.message)}</div>`;
-  } finally {
-    btn.disabled = false;
-  }
+  } finally { btn.disabled = false; }
 }
 
-function getExcelRow(it) {
-  return `1\t${it.name}\t${it.sku}\t${it.price.toFixed(2)}\t\t${it.price.toFixed(2)}\t${it.url}`;
-}
+function getExcelRow(it) { return `1\t${it.name}\t${it.sku}\t${it.price.toFixed(2)}\t\t${it.price.toFixed(2)}\t${it.url}`; }
 
 function render(data) {
   results.hidden = false;
@@ -284,19 +244,16 @@ function render(data) {
 grid.addEventListener('click', (e) => {
   const btnShein = e.target.closest('.btn-shein');
   if (!btnShein || !lastData) return;
-  
   lastClickedIndex = parseInt(btnShein.dataset.index, 10);
-  const url = btnShein.dataset.url;
-  window.open(url);
+  window.open(btnShein.dataset.url);
 });
 
-window.addEventListener('message', (e) => {
+/* RECIBIR TÍTULOS DESDE LA EXTENSIÓN */
+window.addEventListener('message', async (e) => {
   if (!e.data) return;
 
   if (e.data.type === 'SHEIN_ASK_INDEX') {
-    if (lastClickedIndex !== null) {
-      e.source.postMessage({ type: 'SHEIN_HERE_IS_INDEX', index: lastClickedIndex }, '*');
-    }
+    if (lastClickedIndex !== null) e.source.postMessage({ type: 'SHEIN_HERE_IS_INDEX', index: lastClickedIndex }, '*');
     return;
   }
 
@@ -304,14 +261,21 @@ window.addEventListener('message', (e) => {
     const idx = parseInt(e.data.index, 10);
     if (!lastData.items[idx]) return;
 
-    // Actualizar el título en la vista actual
-    lastData.items[idx].name = e.data.titulo;
-    render(lastData);
+    status.innerHTML = `<div class="loading">Traduciendo título capturado... <span class="spinner"></span></div>`;
+
+    let tituloFinal = e.data.titulo;
     
-    // ¡IMPORTANTE! Actualizar también en el historial guardado
+    // Si la extensión también capturó algo en japonés, lo traducimos aquí
+    const esJapones = /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff]/.test(tituloFinal);
+    if (esJapones) {
+      tituloFinal = await traducirTexto(tituloFinal);
+    }
+
+    lastData.items[idx].name = tituloFinal;
+    render(lastData);
     updateCurrentHistory(); 
     
-    status.innerHTML = `<div class="ok">✅ Título actualizado (#${idx + 1}): ${escapeHtml(e.data.titulo)}</div>`;
+    status.innerHTML = `<div class="ok">✅ Título actualizado y traducido (#${idx + 1}): ${escapeHtml(tituloFinal)}</div>`;
   }
 });
 
@@ -328,19 +292,11 @@ window.copiarFila = async function(btnElement, index) {
   } catch (e) { alert('Error al copiar: ' + e.message); }
 };
 
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-}
+function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
-/* =========================================
-   HISTORIAL (Guardando los datos completos)
-   ========================================= */
 function addHistory(url, data) {
   const h = JSON.parse(localStorage.getItem('shein_history') || '[]');
-  // Filtramos si ya existía ese mismo enlace para no duplicar
   const filtered = h.filter(x => x.url !== url);
-  
-  // Guardamos una copia completa de los datos (data) y el timestamp
   filtered.unshift({ url, ts: Date.now(), data: JSON.parse(JSON.stringify(data)) });
   localStorage.setItem('shein_history', JSON.stringify(filtered.slice(0, 10)));
   renderHistory();
@@ -351,7 +307,6 @@ function updateCurrentHistory() {
   const h = JSON.parse(localStorage.getItem('shein_history') || '[]');
   const idx = h.findIndex(x => x.url === currentLoadedUrl);
   if (idx !== -1) {
-    // Actualizamos el historial con el estado actual de los datos
     h[idx].data = JSON.parse(JSON.stringify(lastData));
     localStorage.setItem('shein_history', JSON.stringify(h));
   }
@@ -361,13 +316,10 @@ function renderHistory() {
   const h = JSON.parse(localStorage.getItem('shein_history') || '[]');
   if (!h.length) { historySection.hidden = true; return; }
   historySection.hidden = false;
-  
   historyList.innerHTML = h.map((x, i) => {
-    // Compatibilidad por si hay historial viejo que no guardaba .data
     const count = x.data ? x.data.items.length : x.items;
     const tot = x.data ? x.data.total : x.total;
     const shared = x.data ? x.data.sharedBy : x.sharedBy;
-    
     return `
       <li>
         <button class="hist-btn" onclick="loadHistory(${i})">
@@ -383,24 +335,15 @@ window.loadHistory = function(index) {
   const h = JSON.parse(localStorage.getItem('shein_history') || '[]');
   const item = h[index];
   if (!item) return;
-  
   if (item.data) {
-    // Cargar instantáneamente desde el historial (con los títulos modificados)
     input.value = item.url;
     currentLoadedUrl = item.url;
     lastData = item.data;
-    status.innerHTML = `<div class="ok">✅ Carrito cargado desde el historial (con títulos guardados)</div>`;
+    status.innerHTML = `<div class="ok">✅ Carrito cargado desde el historial</div>`;
     render(lastData);
-  } else {
-    // Si es un historial del código viejo, volvemos a consultar
-    input.value = item.url;
-    consultar(item.url);
-  }
+  } else { input.value = item.url; consultar(item.url); }
 };
 
-/* =========================================
-   EVENTOS PRINCIPALES
-   ========================================= */
 btn.onclick = () => consultar(input.value.trim());
 input.addEventListener('keydown', e => { if (e.key === 'Enter') btn.click(); });
 
@@ -410,7 +353,6 @@ $('copyAllExcel').onclick = async () => {
   const headers = ['UND', 'Descripción', 'SKU', 'Costo ($)', 'Envio ($)', 'Venta ($)', 'Link Carrito'];
   text += headers.join('\t') + '\n';
   lastData.items.forEach(it => { text += getExcelRow(it) + '\n'; });
-
   try {
     await navigator.clipboard.writeText(text);
     $('copyAllExcel').textContent = '✅ ¡Copiado para Excel!';
