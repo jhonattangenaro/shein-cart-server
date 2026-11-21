@@ -85,7 +85,7 @@ async function obtenerTituloReal(url) {
 }
 
 /* ============================================================
-   TRADUCCIÓN con Google Translate gtx (https nativo)
+   TRADUCCIÓN con Google Translate gtx
    ============================================================ */
 function translateText(text) {
   return new Promise((resolve) => {
@@ -116,7 +116,7 @@ function translateText(text) {
 }
 
 /* ============================================================
-   PARSER DE TEXTO (el que SÍ funciona)
+   PARSER DE TEXTO
    ============================================================ */
 function parseSheinCartOutput(output) {
   const result = { sharedBy: '', total: null, itemsCount: 0, items: [] };
