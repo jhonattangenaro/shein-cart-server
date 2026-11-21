@@ -11,8 +11,6 @@
   header h1 { margin: 0 0 8px; font-size: 1.8rem; }
   header p { margin: 0; color: #666; font-size: 0.95rem; }
   main { max-width: 1200px; margin: 0 auto; padding: 20px; }
-
-  /* Panel de Datos del Pedido */
   .order-panel { background: #fff; border-radius: 14px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,.06); margin-bottom: 20px; }
   .order-panel h2 { margin: 0 0 15px; font-size: 1.1rem; border-bottom: 1px solid #eee; padding-bottom: 10px; }
   .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; }
@@ -20,16 +18,12 @@
   .form-group label { font-size: 0.85rem; color: #555; font-weight: 600; }
   .form-group input, .form-group select { padding: 10px; border: 1px solid #ccc; border-radius: 8px; font-size: 0.95rem; font-family: inherit; }
   .form-group input:focus, .form-group select:focus { border-color: #ff2d55; outline: none; }
-
-  /* Buscador */
   .search { display: flex; gap: 10px; margin-bottom: 20px; }
   .search input { flex: 1; padding: 14px 16px; border: 2px solid #ddd; border-radius: 12px; font-size: 1rem; outline: none; transition: border-color .2s; }
   .search input:focus { border-color: #ff2d55; }
   .search button { padding: 14px 28px; background: #ff2d55; color: #fff; border: none; border-radius: 12px; font-size: 1rem; font-weight: 600; cursor: pointer; transition: background .2s; }
   .search button:hover { background: #e02549; }
   .search button:disabled { background: #ccc; cursor: not-allowed; }
-
-  /* Estados y Mensajes */
   #status { margin-bottom: 20px; }
   .loading, .error, .ok { padding: 14px 18px; border-radius: 12px; font-size: .95rem; }
   .loading { background: #eef; color: #334; }
@@ -37,8 +31,6 @@
   .ok { background: #efe; color: #161; }
   .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid #99f; border-top-color: transparent; border-radius: 50%; animation: spin .8s linear infinite; vertical-align: middle; margin-left: 8px; }
   @keyframes spin { to { transform: rotate(360deg); } }
-
-  /* Resultados */
   .summary { display: flex; gap: 24px; flex-wrap: wrap; padding: 18px 22px; background: #fff; border-radius: 14px; box-shadow: 0 1px 3px rgba(0,0,0,.06); margin-bottom: 16px; font-size: 1.05rem; }
   .summary strong { color: #ff2d55; }
   .actions { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
@@ -46,10 +38,8 @@
   .actions button:hover { border-color: #ff2d55; color: #ff2d55; }
   .btn-excel { background: #217346 !important; color: white !important; border: none !important; }
   .btn-excel:hover { background: #1a5c38 !important; color: white !important; }
-
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; }
   .card { background: #fff; border-radius: 14px; padding: 18px; box-shadow: 0 1px 3px rgba(0,0,0,.06); display: flex; flex-direction: column; gap: 8px; position: relative; }
-
   .card-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding-right: 80px; }
   .idx { background: #f0f0f0; padding: 2px 8px; border-radius: 6px; font-size: .8rem; color: #666; }
   .price { font-weight: 700; color: #ff2d55; font-size: 1.1rem; }
@@ -59,29 +49,14 @@
   .variant { margin: 0; color: #555; font-size: .85rem; }
   .meta { margin: 0; color: #999; font-size: .8rem; }
   .sku-text { font-size: 0.85rem; color: #0066cc; font-weight: bold; margin-top: 4px; background: #f0f8ff; padding: 4px 8px; border-radius: 6px; display: inline-block; }
-  .card a { margin-top: auto; color: #0066cc; text-decoration: none; font-size: .85rem; font-weight: 500; }
-  .card a:hover { text-decoration: underline; }
-
-  /* Botón "Ver en SHEIN" */
-  .btn-shein {
-    margin-top: auto;
-    background: none;
-    border: none;
-    color: #0066cc;
-    font-size: .85rem;
-    font-weight: 500;
-    cursor: pointer;
-    padding: 0;
-    text-align: left;
-    font-family: inherit;
-  }
+  
+  /* Estilo para el enlace nativo que mantiene la conexión */
+  .btn-shein { margin-top: auto; color: #0066cc; text-decoration: none; font-size: .85rem; font-weight: 500; display: inline-block; }
   .btn-shein:hover { text-decoration: underline; }
 
-  /* Botón copiar en la tarjeta */
   .btn-copy { position: absolute; top: 18px; right: 18px; background: #eef; border: 1px solid #ccf; color: #334; padding: 6px 12px; border-radius: 8px; font-size: .8rem; font-weight: 600; cursor: pointer; transition: all .2s; }
   .btn-copy:hover { background: #dde; }
   .btn-copy.ok { background: #efe; border-color: #cdc; color: #161; }
-
   #history { margin-top: 40px; }
   #history h2 { font-size: 1.2rem; }
   #historyList { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 8px; }
@@ -97,30 +72,16 @@
   <p>Extrae y formatea los datos para tu sistema</p>
 </header>
 <main>
-  <!-- Formulario superior de referencia -->
   <section class="order-panel">
     <h2>Datos del Pedido</h2>
     <div class="form-grid">
-      <div class="form-group">
-        <label>ID Pedido</label>
-        <input type="text" id="inp-id" placeholder="Ej: S-0500">
-      </div>
-      <div class="form-group">
-        <label>Cliente</label>
-        <input type="text" id="inp-cliente" placeholder="Nombre del cliente">
-      </div>
-      <div class="form-group">
-        <label>Vendedor</label>
-        <input type="text" id="inp-vendedor" placeholder="Tu nombre">
-      </div>
-      <div class="form-group">
-        <label>Fecha</label>
-        <input type="date" id="inp-fecha">
-      </div>
+      <div class="form-group"><label>ID Pedido</label><input type="text" id="inp-id" placeholder="Ej: S-0500"></div>
+      <div class="form-group"><label>Cliente</label><input type="text" id="inp-cliente" placeholder="Nombre del cliente"></div>
+      <div class="form-group"><label>Vendedor</label><input type="text" id="inp-vendedor" placeholder="Tu nombre"></div>
+      <div class="form-group"><label>Fecha</label><input type="date" id="inp-fecha"></div>
     </div>
   </section>
 
-  <!-- Buscador -->
   <section class="search">
     <input id="url" type="url" placeholder="Pega el enlace del carrito (onelink.shein.com...)" autocomplete="off">
     <button id="btn">Consultar</button>
@@ -130,12 +91,10 @@
 
   <section id="results" hidden>
     <div class="summary" id="summary"></div>
-
     <div class="actions">
       <button id="copyAllExcel" class="btn-excel">📊 Copiar Todo (para Excel)</button>
       <button id="exportJson">⬇ Exportar JSON</button>
     </div>
-
     <div class="grid" id="grid"></div>
   </section>
 
@@ -206,32 +165,14 @@ function render(data) {
       ${it.variant ? `<p class="variant">${escapeHtml(it.variant)}</p>` : ''}
       <div class="sku-text">SKU: ${it.sku}</div>
       ${it.meta ? `<p class="meta">${escapeHtml(it.meta)}</p>` : ''}
-      ${it.url ? `<button class="btn-shein" data-index="${i}" data-url="${escapeHtml(it.url)}">Ver en SHEIN →</button>` : ''}
+      
+      <!-- AQUÍ ESTÁ EL TRUCO: Usamos <a> con rel="opener" para no perder la conexión -->
+      ${it.url ? `<a href="${escapeHtml(it.url)}#captura=${i}" target="_blank" rel="opener" class="btn-shein">Ver en SHEIN →</a>` : ''}
     </article>
   `).join('');
 }
 
-/* ============================================================
-   Delegación de eventos: botón "Ver en SHEIN"
-   Abre el producto añadiendo #captura=N al final del hash.
-   La extensión de Chrome leerá ese hash y enviará el título real
-   de vuelta a esta ventana mediante window.opener.postMessage().
-   ============================================================ */
-grid.addEventListener('click', (e) => {
-  const btnShein = e.target.closest('.btn-shein');
-  if (!btnShein || !lastData) return;
-  const index = parseInt(btnShein.dataset.index, 10);
-  const url = btnShein.dataset.url;
-  if (!url) return;
-  // Importante: NO usar '_blank' para conservar window.opener.
-  // Al llamar window.open con un solo argumento se abre nueva pestaña
-  // por defecto y la referencia al opener se mantiene viva.
-  window.open(url + '#captura=' + index);
-});
-
-/* ============================================================
-   Escuchar los títulos que envía la extensión desde SHEIN
-   ============================================================ */
+// Escuchar los títulos que envía la extensión desde SHEIN
 window.addEventListener('message', (e) => {
   if (!e.data || e.data.type !== 'SHEIN_TITULO' || !lastData) return;
   const idx = parseInt(e.data.index, 10);
@@ -246,19 +187,13 @@ window.copiarFila = async function(btnElement, index) {
   if (!lastData) return;
   const item = lastData.items[index];
   const text = getExcelRow(item);
-
   try {
     await navigator.clipboard.writeText(text);
     const orig = btnElement.textContent;
     btnElement.textContent = '¡Copiado!';
     btnElement.classList.add('ok');
-    setTimeout(() => {
-      btnElement.textContent = orig;
-      btnElement.classList.remove('ok');
-    }, 1500);
-  } catch (e) {
-    alert('Error al copiar: ' + e.message);
-  }
+    setTimeout(() => { btnElement.textContent = orig; btnElement.classList.remove('ok'); }, 1500);
+  } catch (e) { alert('Error al copiar: ' + e.message); }
 };
 
 function escapeHtml(s) {
@@ -294,27 +229,19 @@ input.addEventListener('keydown', e => { if (e.key === 'Enter') btn.click(); });
 
 $('copyAllExcel').onclick = async () => {
   if (!lastData) return;
-
   const idPedido = document.getElementById('inp-id').value || 'N/A';
   const cliente = document.getElementById('inp-cliente').value || 'N/A';
   const vendedor = document.getElementById('inp-vendedor').value || 'N/A';
   const fecha = document.getElementById('inp-fecha').value || 'N/A';
-
   let text = `ID Pedido: ${idPedido} | Cliente: ${cliente} | Vendedor: ${vendedor} | Fecha: ${fecha}\n\n`;
   const headers = ['UND', 'Descripción', 'SKU', 'Costo ($)', 'Envio ($)', 'Venta ($)', 'Link Carrito'];
   text += headers.join('\t') + '\n';
-
-  lastData.items.forEach(it => {
-    text += getExcelRow(it) + '\n';
-  });
-
+  lastData.items.forEach(it => { text += getExcelRow(it) + '\n'; });
   try {
     await navigator.clipboard.writeText(text);
     $('copyAllExcel').textContent = '✅ ¡Copiado para Excel!';
     setTimeout(() => $('copyAllExcel').textContent = '📊 Copiar Todo (para Excel)', 2000);
-  } catch (e) {
-    alert('Error al copiar: ' + e.message);
-  }
+  } catch (e) { alert('Error al copiar: ' + e.message); }
 };
 
 $('exportJson').onclick = () => {
