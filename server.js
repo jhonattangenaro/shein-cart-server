@@ -1,6 +1,7 @@
 const express = require('express');
-const https = require('https');
+const { exec } = require('child_process');
 const path = require('path');
+const https = require('https');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -20,206 +21,168 @@ app.use((req, res, next) => {
 app.get('/api/health', (req, res) => res.json({ ok: true, ts: Date.now() }));
 
 /* ============================================================
-   PETICIÓN HTTP (wrapper con headers de Colombia)
+   TRADUCCIÓN con Google Translate gtx
    ============================================================ */
-function httpRequest(url, options = {}) {
-  return new Promise((resolve, reject) => {
-    const urlObj = new URL(url);
-    const reqOptions = {
-      hostname: urlObj.hostname,
-      path: urlObj.pathname + urlObj.search,
-      method: options.method || 'GET',
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Linux; Android 13; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
-        'Accept': 'application/json, text/plain, */*',
-        'Accept-Language': 'es-ES,es;q=0.9,en;q=0.8',
-        'Origin': 'https://m.shein.com',
-        'Referer': 'https://m.shein.com/',
-        'Cookie': 'shein_country=CO; shein_language=es; currency=COP; country=CO',
-        ...options.headers
-      },
-      timeout: 15000
-    };
+function translateText(text) {
+  return new Promise((resolve) => {
+    if (!text || typeof text !== 'string') return resolve(text || '');
+    const t = text.trim();
+    if (!t) return resolve('');
+    if (/^[A-Za-z0-9\s.,;:!?()'"¡¿\-/%&]+$/.test(t) && t.length < 200) return resolve(t);
 
-    const req = https.request(reqOptions, (res) => {
+    const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=es&dt=t&q=${encodeURIComponent(t)}`;
+    https.get(url, { headers: { 'User-Agent': 'Mozilla/5.0' } }, (res) => {
       let data = '';
       res.on('data', c => data += c);
       res.on('end', () => {
         try {
-          const json = JSON.parse(data);
-          resolve({ status: res.statusCode, headers: res.headers, data: json });
-        } catch (e) {
-          resolve({ status: res.statusCode, headers: res.headers, raw: data });
-        }
+          const j = JSON.parse(data);
+          if (j && Array.isArray(j[0])) {
+            const tr = j[0].map(x => x[0]).join('');
+            if (tr && tr !== t && tr.length > 0) {
+              console.log(`[OK] "${t.slice(0, 40)}..." → "${tr.slice(0, 40)}..."`);
+              return resolve(tr);
+            }
+          }
+        } catch (e) {}
+        resolve(t);
       });
-    });
-    req.on('error', reject);
-    req.on('timeout', () => { req.destroy(); reject(new Error('Timeout')); });
-    if (options.body) req.write(typeof options.body === 'string' ? options.body : JSON.stringify(options.body));
-    req.end();
+    }).on('error', () => resolve(t));
   });
 }
 
 /* ============================================================
-   RESOLVER group_id desde onelink.shein.com
+   PARSER DE TEXTO de shein-cart CLI
    ============================================================ */
-async function resolverGroupId(url) {
-  try {
-    const res = await httpRequest(url, { method: 'GET' });
-    // onelink devuelve HTML con el group_id embebido
-    const html = typeof res.raw === 'string' ? res.raw : '';
-    const match = html.match(/group_id[=:]\s*["']?([A-Za-z0-9_]+)/i) 
-               || html.match(/group_id=([A-Za-z0-9_]+)/i);
-    if (match) return match[1];
-    // También puede venir en la URL de redirección
-    if (res.headers && res.headers.location) {
-      const m2 = res.headers.location.match(/group_id=([A-Za-z0-9_]+)/i);
-      if (m2) return m2[1];
-    }
-  } catch (e) {
-    console.log('[resolverGroupId error]', e.message);
+function parseSheinCartOutput(output) {
+  const result = { sharedBy: '', total: null, itemsCount: 0, items: [] };
+  const header = output.match(/Items shared by (.+?) · (\d+) items? · total \$?([\d.,]+)/i);
+  if (header) {
+    result.sharedBy = header[1].trim();
+    result.itemsCount = parseInt(header[2], 10);
+    result.total = parseFloat(header[3].replace(',', ''));
   }
-  return null;
-}
+  const lines = output.split(/\r?\n/);
+  const itemStart = /^\s*(\d+)\s+\$?([\d.]+)(?:\s+\$?([\d.]+)\s+-(\d+)%)?\s+(.+)$/;
+  const urlLine = /^\s*(https?:\/\/\S+)\s*$/;
+  let current = null;
+  const flush = () => { if (current) { result.items.push(current); current = null; } };
 
-/* ============================================================
-   OBTENER CARRITO desde el endpoint interno de SHEIN (en español)
-   ============================================================ */
-async function obtenerCarrito(groupId) {
-  const url = 'https://m.shein.com/bff-api/order/cart/share/landing';
-  const body = { group_id: groupId };
-  
-  const res = await httpRequest(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Requested-With': 'XMLHttpRequest'
-    },
-    body: JSON.stringify(body)
-  });
-
-  if (res.status !== 200 || !res.data) {
-    throw new Error(`SHEIN respondió ${res.status}`);
-  }
-
-  // La estructura típica: res.data.info.items
-  const info = res.data.info || res.data;
-  if (!info || !info.items || !Array.isArray(info.items)) {
-    throw new Error('Respuesta sin items. Estructura: ' + JSON.stringify(res.data).slice(0, 200));
-  }
-
-  return {
-    sharedBy: info.share_user_name || info.user_name || '',
-    items: info.items
-  };
-}
-
-/* ============================================================
-   NORMALIZAR items a nuestro formato
-   ============================================================ */
-function normalizarItems(items) {
-  return items.map((raw, i) => {
-    // SHEIN devuelve precios en centavos a veces, o como string
-    const price = parseFloat(raw.price || raw.now_price || raw.sale_price || 0);
-    const originalPrice = raw.original_price ? parseFloat(raw.original_price) : null;
-    const discountPct = raw.discount ? parseInt(raw.discount, 10) : null;
-    
-    // La URL del producto
-    let url = raw.goods_url || raw.url || '';
-    if (!url && raw.goods_id) {
-      url = `https://www.shein.com/${raw.goods_name || 'product'}-p-${raw.goods_id}.html`;
+  for (const line of lines) {
+    const m = line.match(itemStart);
+    if (m) {
+      flush();
+      current = {
+        index: parseInt(m[1], 10),
+        price: parseFloat(m[2]),
+        originalPrice: m[3] ? parseFloat(m[3]) : null,
+        discountPct: m[4] ? parseInt(m[4], 10) : null,
+        name: m[5].trim(),
+        variant: '', meta: '', url: '', sku: '', img: '', status: ''
+      };
+      continue;
     }
-    
-    // SKU
-    const sku = String(raw.goods_id || raw.sku || raw.spu || '');
-    
-    // Imagen
-    let img = raw.goods_img || raw.image || raw.main_image || '';
-    if (!img && sku) {
-      img = `https://img.ltwebstatic.com/images3_pi/2023/07/20/${sku}_thumbnail_400x533.webp`;
-    }
-    
-    // Status (agotado, stock bajo, etc.)
-    let status = raw.status_name || raw.status || '';
-    if (raw.stock === 0 || raw.is_sold_out) status = 'Agotado';
-    else if (raw.stock && raw.stock < 10) status = `Solo quedan ${raw.stock}`;
+    if (!current) continue;
 
-    return {
-      index: i + 1,
-      price: price > 100 ? price / 100 : price, // SHEIN a veces da centavos
-      originalPrice: originalPrice && originalPrice > 100 ? originalPrice / 100 : originalPrice,
-      discountPct,
-      name: raw.goods_name || raw.name || raw.title || '',
-      variant: raw.attr || raw.sku_info || raw.color_size || '',
-      meta: raw.color || raw.size || '',
-      url,
-      sku,
-      img,
-      status
-    };
-  });
+    const u = line.match(urlLine);
+    if (u && !current.url) {
+      current.url = u[1];
+      const s = current.url.match(/-p-(\d+)\.html/);
+      if (s) {
+        current.sku = s[1];
+        current.img = '';
+      } else {
+        current.sku = `SHEIN-${current.index}`;
+      }
+      continue;
+    }
+
+    const trimmed = line.trim();
+    if (trimmed && /only \d+ left/i.test(trimmed)) {
+      current.status = trimmed;
+    } else if (trimmed && !current.variant && trimmed.length > 2) {
+      const parts = trimmed.split(/\s+·\s+/);
+      current.variant = parts[0].trim();
+      current.meta = parts.slice(1).join(' · ').trim();
+    } else if (trimmed && /unavailable|sold out|agotado/i.test(trimmed)) {
+      current.status = trimmed;
+    }
+  }
+  flush();
+  if (!result.itemsCount) result.itemsCount = result.items.length;
+  return result;
 }
 
 /* ============================================================
    ENDPOINT PRINCIPAL
    ============================================================ */
-app.post('/api/cart', async (req, res) => {
+app.post('/api/cart', (req, res) => {
   const rawUrl = (req.body && req.body.url || '').trim();
   if (!rawUrl) return res.status(400).json({ ok: false, error: 'Falta el enlace del carrito.' });
 
   const safe = /^https?:\/\/(onelink\.shein\.com|[\w.-]*shein\.com)\/[A-Za-z0-9\-._~:/?#\[\]@!$&'()*+,;=%]+$/i;
   if (!safe.test(rawUrl)) return res.status(400).json({ ok: false, error: 'El enlace no parece ser válido de SHEIN.' });
 
+  const quoted = `"${rawUrl.replace(/"/g, '\\"')}"`;
+  const cmd = `npx --no-install shein-cart ${quoted}`;
   const started = Date.now();
 
-  try {
-    // 1. Resolver group_id
-    console.log('[1/3] Resolviendo group_id...');
-    const groupId = await resolverGroupId(rawUrl);
-    if (!groupId) {
-      return res.status(200).json({ ok: false, error: 'No se pudo resolver el group_id del enlace.' });
-    }
-    console.log(`[1/3] group_id: ${groupId}`);
+  exec(cmd, { timeout: 90000, maxBuffer: 20 * 1024 * 1024, shell: true }, async (err, stdout, stderr) => {
+    if (err) return res.status(500).json({ ok: false, error: 'Error consultando carrito.', detail: stderr });
 
-    // 2. Obtener carrito en español
-    console.log('[2/3] Obteniendo carrito desde SHEIN (Colombia/es)...');
-    const carrito = await obtenerCarrito(groupId);
-    console.log(`[2/3] ${carrito.items.length} items recibidos`);
+    const parsed = parseSheinCartOutput(stdout);
+    console.log(`[Parse] ${parsed.items.length} items (header: ${parsed.itemsCount})`);
 
-    // 3. Normalizar
-    const items = normalizarItems(carrito.items);
-
-    // Marcar agotados
-    for (const it of items) {
-      it.outOfStock = /agotado|sold out|no disponible|unavailable/i.test(it.status);
+    if (!parsed.items.length) {
+      return res.status(200).json({ ok: false, error: 'El carrito está vacío o expiró.', raw: stdout.slice(0, 800) });
     }
 
-    const disponibles = items.filter(it => !it.outOfStock).length;
-    console.log(`[3/3] total=${items.length} disponibles=${disponibles} agotados=${items.length - disponibles}`);
+    // TRADUCIR todos los campos de texto en paralelo
+    console.log(`[Traduciendo] ${parsed.items.length} productos...`);
+    try {
+      const traducciones = await Promise.all(
+        parsed.items.map(it => 
+          Promise.all([
+            translateText(it.name),
+            translateText(it.variant),
+            translateText(it.meta)
+          ])
+        )
+      );
+      
+      traducciones.forEach(([name, variant, meta], i) => {
+        parsed.items[i].name = name;
+        parsed.items[i].variant = variant;
+        parsed.items[i].meta = meta;
+      });
+      console.log('[Traducción completada]');
+    } catch (e) {
+      console.warn('[Error traduciendo]:', e.message);
+    }
 
-    const total = items
+    // Marcar agotados (NO filtrar)
+    for (const it of parsed.items) {
+      const s = String(it.status || '').toLowerCase();
+      it.outOfStock = /sold out|out of stock|agotado|indisponible|no disponible|unavailable/.test(s);
+      if (it.outOfStock) console.log(`[AGOTADO] #${it.index} SKU=${it.sku} status="${it.status}"`);
+      const m = (it.status || '').match(/only\s+(\d+)\s+left/i);
+      if (m) it.status = `solo quedan ${m[1]}`;
+    }
+
+    const disponibles = parsed.items.filter(it => !it.outOfStock).length;
+    console.log(`[Conteo] total=${parsed.items.length} disponibles=${disponibles} agotados=${parsed.items.length - disponibles}`);
+
+    parsed.itemsCount = parsed.items.length;
+    parsed.availableCount = disponibles;
+    parsed.total = parsed.items
       .filter(it => !it.outOfStock)
       .reduce((acc, item) => acc + (item.price || 0), 0);
 
-    res.json({
-      ok: true,
-      sharedBy: carrito.sharedBy,
-      itemsCount: items.length,
-      availableCount: disponibles,
-      total,
-      items,
-      currency: 'COP',
-      region: 'CO',
-      ms: Date.now() - started
-    });
-
-  } catch (err) {
-    console.error('[ERROR]', err.message);
-    res.status(500).json({ ok: false, error: err.message });
-  }
+    res.json({ ok: true, ...parsed, ms: Date.now() - started });
+  });
 });
 
 app.listen(PORT, () => {
-  console.log(`\n🛒 SHEIN Cart Viewer (español nativo - Colombia)`);
+  console.log(`\n🛒 SHEIN Cart Viewer (shein-cart CLI + traducción)`);
   console.log(`Abre http://localhost:${PORT}\n`);
 });
